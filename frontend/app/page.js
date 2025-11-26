@@ -81,7 +81,7 @@ export default function Home() {
             color: 'white',
             fontFamily: 'Inter, system-ui, sans-serif'
         }}>
-            <header style={{
+            {/* <header style={{
                 position: 'fixed',
                 top: 0,
                 left: 0,
@@ -103,17 +103,64 @@ export default function Home() {
                         <Image
                             src="/NiceAnime (2).png"
                             alt="Phim Hay Logo"
-                            width={1000} //160
-                            height={600} // 48
+                            width={800} //160
+                            height={320} // 48
                             priority
-                            style={{ height: '48px', width: 'auto' }}
+                            style={{ height: '120px', width: 'auto', maxWidth: 'none' }}
                         />
                     </Link>
                     <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
                         Vietsub HD • Miễn phí • Cập nhật mỗi ngày
                     </div>
                 </div>
-            </header>
+            </header> */
+
+                <header style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 10,
+                    background: 'linear-gradient(90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
+                }}>
+                    <div style={{
+                        maxWidth: '1300px',
+                        margin: '0 auto',
+                        padding: '0.35rem 1.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        minHeight: '72px'
+                    }}>
+                        <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: '0.75rem' }}>
+                            <Image
+                                src="/NiceAnime (2).png"
+                                alt="Phim Hay Logo"
+                                width={500}
+                                height={200}
+                                priority
+                                style={{
+                                    height: '52px',
+                                    width: 'auto',
+                                    maxWidth: 'none',
+                                    objectFit: 'contain'
+                                }}
+                            />
+                        </Link>
+                        <div style={{
+                            color: '#f5f5f5',
+                            fontSize: '0.95rem',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em'
+                        }}>
+                            Vietsub HD • Miễn phí • Cập nhật mỗi ngày
+                        </div>
+                    </div>
+                </header>
+            }
 
             {/* Hero Section */}
             <section style={{

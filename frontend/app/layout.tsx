@@ -16,9 +16,9 @@ export const metadata: Metadata = {
   title: "Phim Hay - Đảo Phim Vietsub",
   description: "Kho phim Vietsub chất lượng cao, cập nhật mỗi ngày",
   icons: {
-    icon: "/faviconNiceAnime.ico",
-    shortcut: "/faviconNiceAnime.ico",
-    apple: "/faviconNiceAnime.ico",
+    icon: "/NiceAnime.png",
+    shortcut: "/NiceAnime.png",
+    apple: "/NiceAnime.png",
   },
 };
 
