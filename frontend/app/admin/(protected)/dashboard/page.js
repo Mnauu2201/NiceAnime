@@ -43,16 +43,7 @@ export default function AdminDashboard() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             if (currentUser) {
-                // ✅ Kiểm tra email admin (tùy chọn, tăng bảo mật)
-                const adminEmails = ['quangt2234@gmail.com', 'youremail@gmail.com'];
-
-                if (adminEmails.includes(currentUser.email)) {
-                    loadMovies();
-                } else {
-                    showNotification('Bạn không có quyền truy cập!', 'error');
-                    signOut(auth);
-                    router.push('/');
-                }
+                loadMovies();
             } else {
                 router.push('/admin/login');
             }
@@ -204,6 +195,7 @@ export default function AdminDashboard() {
 
     const handleLogout = async () => {
         await signOut(auth);
+        await fetch('/api/auth/session', { method: 'DELETE' });
         router.push('/admin/login');
     };
 

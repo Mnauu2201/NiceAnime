@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = ['/admin/login'];
+const ADMIN_COOKIE = 'adminSession';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,7 +11,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasAdminCookie = Boolean(request.cookies.get('adminAuth'));
+  const hasAdminCookie = Boolean(request.cookies.get(ADMIN_COOKIE));
   const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
   if (!hasAdminCookie && !isPublicPath) {
@@ -29,4 +30,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/admin/:path*'],
 };
+
+
 

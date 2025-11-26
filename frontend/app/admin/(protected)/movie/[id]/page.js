@@ -3,10 +3,8 @@
 import { use, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
-
-const adminEmails = ['quangt2234@gmail.com', 'youremail@gmail.com'];
 
 const formatDateTimeInput = (value) => {
     if (!value) return '';
@@ -56,14 +54,6 @@ export default function MovieDetailPage({ params }) {
                 router.push('/admin/login');
                 return;
             }
-
-            if (!adminEmails.includes(currentUser.email)) {
-                showNotification('Bạn không có quyền truy cập!', 'error');
-                await signOut(auth);
-                router.push('/');
-                return;
-            }
-
             await loadMovie();
         });
 
