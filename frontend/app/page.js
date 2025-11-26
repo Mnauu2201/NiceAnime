@@ -101,10 +101,10 @@ export default function Home() {
                 }}>
                     <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
                         <Image
-                            src="/NiceAnime.png"
+                            src="/NiceAnime (2).png"
                             alt="Phim Hay Logo"
-                            width={160}
-                            height={48}
+                            width={1000} //160
+                            height={600} // 48
                             priority
                             style={{ height: '48px', width: 'auto' }}
                         />
