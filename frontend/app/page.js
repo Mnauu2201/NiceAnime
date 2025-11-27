@@ -2,25 +2,35 @@
 import Image from 'next/image';
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import Link from 'next/link';
 
 export default function Home() {
     const [movies, setMovies] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const MOVIES_PER_PAGE = 20;
 
     useEffect(() => {
         loadMovies();
     }, []);
 
+    useEffect(() => {
+        document.title = "NiceAnime";
+    }, []);
+
     const loadMovies = async () => {
         try {
-            const querySnapshot = await getDocs(collection(db, 'movies'));
-            const moviesList = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
+            // Lấy tối đa 20 phim mới nhất theo createdAt
+            const moviesRef = collection(db, 'movies');
+            const q = query(moviesRef, orderBy('createdAt', 'desc'));
+            const querySnapshot = await getDocs(q);
+            const moviesList = querySnapshot.docs.map((docSnap) => ({
+                id: docSnap.id,
+                ...docSnap.data(),
             }));
+
             setMovies(moviesList);
         } catch (error) {
             console.error('Error loading movies:', error);
@@ -35,6 +45,17 @@ export default function Home() {
             movie.title?.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [movies, searchTerm]);
+
+    // Tính toán phân trang
+    const totalPages = Math.ceil(filteredMovies.length / MOVIES_PER_PAGE);
+    const startIndex = (currentPage - 1) * MOVIES_PER_PAGE;
+    const endIndex = startIndex + MOVIES_PER_PAGE;
+    const paginatedMovies = filteredMovies.slice(startIndex, endIndex);
+
+    // Reset về trang 1 khi search
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
 
     const featuredMovie = movies[0];
 
@@ -101,7 +122,7 @@ export default function Home() {
                 }}>
                     <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
                         <Image
-                            src="/NiceAnime (2).png"
+                            src="/NiceAnime-header.png"
                             alt="Phim Hay Logo"
                             width={800} //160
                             height={320} // 48
@@ -121,7 +142,7 @@ export default function Home() {
                     left: 0,
                     right: 0,
                     zIndex: 10,
-                    background: 'linear-gradient(90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)',
+                    background: 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)', /* Đã thay đổi thành -90deg */
                     borderBottom: '1px solid rgba(255,255,255,0.08)',
                     boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
                 }}>
@@ -134,18 +155,20 @@ export default function Home() {
                         justifyContent: 'space-between',
                         minHeight: '72px'
                     }}>
-                        <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: '0.75rem' }}>
+                        <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: '0.75rem', overflow: 'visible', }}>
                             <Image
-                                src="/NiceAnime (2).png"
+                                src="/NiceAnime-header.png"
                                 alt="Phim Hay Logo"
-                                width={500}
-                                height={200}
+                                width={600}
+                                height={180}
                                 priority
                                 style={{
-                                    height: '52px',
+                                    height: '72px',
                                     width: 'auto',
-                                    maxWidth: 'none',
-                                    objectFit: 'contain'
+                                    // maxWidth: 'none',
+                                    objectFit: 'contain',
+                                    marginTop: '-6px',
+                                    marginBottom: '-6px',
                                 }}
                             />
                         </Link>
@@ -181,7 +204,7 @@ export default function Home() {
                         loop
                         muted
                         playsInline
-                        preload="auto"
+                        preload="metadata"
                         style={{
                             width: '100%',
                             height: '100%',
@@ -220,7 +243,7 @@ export default function Home() {
                         lineHeight: 1.2,
                         maxWidth: '900px'
                     }}>
-                        Khám phá kho phim Vietsub chất lượng cao, cập nhật liên tục mỗi ngày
+                        NiceAnime - Khám phá kho phim Vietsub chất lượng cao, cập nhật liên tục!
                     </h1>
                     <p style={{
                         fontSize: '1.125rem',
@@ -247,7 +270,7 @@ export default function Home() {
                             <span style={{ fontSize: '1.25rem', marginRight: '0.75rem' }}>🔎</span>
                             <input
                                 type="text"
-                                placeholder="Nhập tên phim, ..."
+                                placeholder="Nhập tên phim"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 style={{
@@ -287,6 +310,7 @@ export default function Home() {
                         </h2>
                         <p style={{ color: '#94a3b8' }}>
                             {filteredMovies.length} phim được tìm thấy
+                            {!searchTerm && totalPages > 1 && ` • Trang ${currentPage}/${totalPages}`}
                         </p>
                     </div>
                 </div>
@@ -323,13 +347,14 @@ export default function Home() {
                         gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
                         gap: '1.5rem'
                     }}>
-                        {filteredMovies.map(movie => {
+                        {paginatedMovies.map(movie => {
                             const totalEpisodes = movie.totalEpisodes || movie.episodes?.length || 1;
                             const currentEpisode = movie.currentEpisode || movie.episodes?.length || totalEpisodes;
 
                             return (
                                 <Link
-                                    href={`/movie/${movie.id}`}
+                                    // href={`/movie/${movie.id}`}
+                                    href={`/movie/${movie.slug || movie.id}`}
                                     key={movie.id}
                                     style={{ textDecoration: 'none', color: 'white' }}
                                 >
@@ -359,7 +384,6 @@ export default function Home() {
                                                 fill
                                                 sizes="(max-width: 768px) 100vw, 240px"
                                                 style={{ objectFit: 'cover' }}
-                                                unoptimized
                                             />
                                         </div>
                                         <div style={{
@@ -414,6 +438,94 @@ export default function Home() {
                         })}
                     </div>
                 )}
+
+                {/* Phân trang */}
+                {!searchTerm && totalPages > 1 && (
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        marginTop: '3rem',
+                        flexWrap: 'wrap'
+                    }}>
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                backgroundColor: currentPage === 1 ? '#374151' : '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.375rem',
+                                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '600',
+                                opacity: currentPage === 1 ? 0.5 : 1
+                            }}
+                        >
+                            ← Trước
+                        </button>
+
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                            // Hiển thị trang đầu, cuối, và các trang xung quanh trang hiện tại
+                            if (
+                                page === 1 ||
+                                page === totalPages ||
+                                (page >= currentPage - 2 && page <= currentPage + 2)
+                            ) {
+                                return (
+                                    <button
+                                        key={page}
+                                        onClick={() => setCurrentPage(page)}
+                                        style={{
+                                            padding: '0.5rem 1rem',
+                                            backgroundColor: currentPage === page ? '#3b82f6' : '#374151',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '0.375rem',
+                                            cursor: 'pointer',
+                                            fontSize: '0.875rem',
+                                            fontWeight: '600',
+                                            minWidth: '40px'
+                                        }}
+                                    >
+                                        {page}
+                                    </button>
+                                );
+                            } else if (
+                                page === currentPage - 3 ||
+                                page === currentPage + 3
+                            ) {
+                                return (
+                                    <span key={page} style={{ color: '#94a3b8', padding: '0 0.25rem' }}>
+                                        ...
+                                    </span>
+                                );
+                            }
+                            return null;
+                        })}
+
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentPage === totalPages}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                backgroundColor: currentPage === totalPages ? '#374151' : '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.375rem',
+                                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '600',
+                                opacity: currentPage === totalPages ? 0.5 : 1
+                            }}
+                        >
+                            Sau →
+                        </button>
+                    </div>
+                )}
+
             </main>
 
             {/* Footer */}
@@ -424,7 +536,8 @@ export default function Home() {
                 textAlign: 'center',
             }}>
                 <p style={{ color: '#64748b' }}>
-                    © 2025 Phim Hay - Xem phim miễn phí • Made with ❤️
+                    {/* © 2025 Phim Hay - Xem phim miễn phí • Made with ❤️ */}
+                    Copyright © {new Date().getFullYear()} by NiceAnime • Website made by Nguyen Quang Anh
                 </p>
             </footer>
         </div>

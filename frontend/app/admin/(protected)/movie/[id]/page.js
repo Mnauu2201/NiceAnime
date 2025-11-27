@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { slugify } from '@/lib/utils';
 
 const formatDateTimeInput = (value) => {
     if (!value) return '';
@@ -76,6 +77,13 @@ export default function MovieDetailPage({ params }) {
             }
             const movieData = movieDoc.data();
             setMovie({ id: movieDoc.id, ...movieData });
+
+            // Tự động tạo slug nếu phim cũ chưa có slug
+            if (!movieData.slug && movieData.title) {
+                const slug = slugify(movieData.title);
+                await updateDoc(doc(db, 'movies', movieId), { slug });
+            }
+
             setFormData({
                 title: movieData.title || '',
                 thumbnail: movieData.thumbnail || '',
@@ -157,8 +165,10 @@ export default function MovieDetailPage({ params }) {
         e.preventDefault();
         setSavingMovie(true);
         try {
+            const slug = slugify(formData.title);
             await updateDoc(doc(db, 'movies', movieId), {
                 title: formData.title,
+                slug: slug, // Tự động tạo slug khi cập nhật
                 thumbnail: formData.thumbnail,
                 category: formData.category,
                 year: parseInt(formData.year) || new Date().getFullYear(),
@@ -221,25 +231,70 @@ export default function MovieDetailPage({ params }) {
         }
 
         try {
+            const parsedEpisodeNumber =
+                parseInt(newEpisode.episodeNumber) || episodes.length + 1;
+
+            // Thêm document tập mới
             await addDoc(collection(db, 'episodes'), {
                 movieId,
-                episodeNumber: parseInt(newEpisode.episodeNumber) || episodes.length + 1,
+                episodeNumber: parsedEpisodeNumber,
                 title: newEpisode.title || `Tập ${newEpisode.episodeNumber || episodes.length + 1}`,
                 videoUrl: newEpisode.videoUrl,
-                createdAt: parseDateTimeInput(newEpisode.createdAt)
+                createdAt: parseDateTimeInput(newEpisode.createdAt),
             });
+
+            // Tính lại tổng số tập mới
+            const currentTotal = Number(movie?.totalEpisodes || 0);
+            const newTotalEpisodes = Math.max(
+                currentTotal,
+                parsedEpisodeNumber,
+                episodes.length + 1
+            );
+
+            // Cập nhật field totalEpisodes của phim
+            await updateDoc(doc(db, 'movies', movieId), {
+                totalEpisodes: newTotalEpisodes,
+            });
+
+            // Cập nhật state local trong admin cho đúng ngay lập tức
+            setMovie((prev) =>
+                prev ? { ...prev, totalEpisodes: newTotalEpisodes } : prev
+            );
+            setFormData((prev) => ({
+                ...prev,
+                totalEpisodes: newTotalEpisodes,
+            }));
+
             showNotification('Đã thêm tập mới!', 'success');
             setNewEpisode({
                 episodeNumber: '',
                 title: '',
                 videoUrl: '',
-                createdAt: ''
+                createdAt: '',
             });
             await loadEpisodes();
         } catch (error) {
             console.error('Error adding episode:', error);
             showNotification('Không thể thêm tập: ' + error.message, 'error');
         }
+    };
+
+    const handleNewEpisodeNumberChange = (value) => {
+        setNewEpisode((prev) => {
+            const episodeNumber = value;
+
+            // Nếu tiêu đề đang rỗng hoặc đang ở dạng "Tập ..." thì tự động cập nhật
+            let title = prev.title;
+            if (!title || title.startsWith('Tập ')) {
+                title = episodeNumber ? `Tập ${episodeNumber}` : '';
+            }
+
+            return {
+                ...prev,
+                episodeNumber,
+                title,
+            };
+        });
     };
 
     const handleDeleteMovie = () => {
@@ -350,7 +405,11 @@ export default function MovieDetailPage({ params }) {
             <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                     <button
-                        onClick={() => router.push('/admin/dashboard')}
+                        onClick={() => {
+                            // Lưu flag để biết đang quay lại từ trang sửa
+                            sessionStorage.setItem('returningFromEdit', 'true');
+                            router.push('/admin/dashboard');
+                        }}
                         style={{
                             backgroundColor: '#1d4ed8',
                             padding: '0.5rem 1rem',
@@ -488,7 +547,7 @@ export default function MovieDetailPage({ params }) {
                                         <input
                                             type="number"
                                             value={episode.episodeNumber}
-                                            onChange={(e) => handleEpisodeFieldChange(episode.id, 'episodeNumber', e.target.value)}
+                                            onChange={(e) => handleNewEpisodeNumberChange(e.target.value)}
                                             placeholder="Số tập"
                                             style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
                                         />
@@ -538,7 +597,7 @@ export default function MovieDetailPage({ params }) {
                             <input
                                 type="number"
                                 value={newEpisode.episodeNumber}
-                                onChange={(e) => setNewEpisode({ ...newEpisode, episodeNumber: e.target.value })}
+                                onChange={(e) => handleNewEpisodeNumberChange(e.target.value)}
                                 placeholder="Số tập"
                                 style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
                             />

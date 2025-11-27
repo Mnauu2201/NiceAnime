@@ -33,13 +33,40 @@ export default function MovieDetail() {
         }
     }, [searchParams, episodes]);
 
+    useEffect(() => {
+        if (movie?.title) {
+            document.title = `NiceAnime - ${movie.title}`;
+        } else {
+            document.title = "NiceAnime";
+        }
+    }, [movie]);
+
     const loadMovie = async () => {
         try {
-            const docRef = doc(db, 'movies', params.id);
-            const docSnap = await getDoc(docRef);
+            // const docRef = doc(db, 'movies', params.id);
+            // const docSnap = await getDoc(docRef);
 
-            if (docSnap.exists()) {
-                setMovie({ id: docSnap.id, ...docSnap.data() });
+            // if (docSnap.exists()) {
+            //     setMovie({ id: docSnap.id, ...docSnap.data() });
+
+            // Query phim bằng slug thay vì ID
+            const moviesQuery = query(
+                collection(db, 'movies'),
+                where('slug', '==', params.id)
+            );
+            const snapshot = await getDocs(moviesQuery);
+
+            if (!snapshot.empty) {
+                const movieDoc = snapshot.docs[0];
+                setMovie({ id: movieDoc.id, ...movieDoc.data() });
+            } else {
+                // Fallback: nếu không tìm thấy bằng slug, thử tìm bằng ID (cho phim cũ)
+                const docRef = doc(db, 'movies', params.id);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setMovie({ id: docSnap.id, ...docSnap.data() });
+                }
+
             }
         } catch (error) {
             console.error('Error loading movie:', error);
@@ -270,7 +297,8 @@ export default function MovieDetail() {
                                 return (
                                     <Link
                                         key={episode.id}
-                                        href={`/movie/${movie.id}?ep=${episode.episodeNumber}`}
+                                        // href={`/movie/${movie.id}?ep=${episode.episodeNumber}`}
+                                        href={`/movie/${movie.slug || movie.id}?ep=${episode.episodeNumber}`}
                                         onClick={() => setCurrentEpisode(episode)}
                                         style={{
                                             backgroundColor: isCurrent ? '#3b82f6' : '#334155',

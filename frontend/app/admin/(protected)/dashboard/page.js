@@ -4,6 +4,9 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, addDoc, getDocs, doc, query, where, writeBatch } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
+import { slugify } from '@/lib/utils';
+import Image from 'next/image';
+import Link from 'next/link';
 
 export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
@@ -13,6 +16,7 @@ export default function AdminDashboard() {
     const notificationTimer = useRef(null);
     const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null, loading: false });
     const router = useRouter();
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [formData, setFormData] = useState({
         title: '',
@@ -116,8 +120,10 @@ export default function AdminDashboard() {
 
         try {
             // BƯỚC 1: Tạo document trong collection "movies"
+            const slug = slugify(formData.title);
             const movieRef = await addDoc(collection(db, 'movies'), {
                 title: formData.title,
+                slug: slug, // Thêm slug để dùng trong URL
                 thumbnail: formData.thumbnail,
                 category: formData.category,
                 year: formData.year,
@@ -227,8 +233,33 @@ export default function AdminDashboard() {
     };
 
     const goToMovieDetail = (movieId) => {
+        // Lưu vị trí scroll hiện tại
+        sessionStorage.setItem('adminDashboardScroll', window.scrollY.toString());
         router.push(`/admin/movie/${movieId}`);
     };
+
+    // Khôi phục vị trí scroll khi quay lại
+    useEffect(() => {
+        const returningFromEdit = sessionStorage.getItem('returningFromEdit');
+        const savedScroll = sessionStorage.getItem('adminDashboardScroll');
+
+        if (returningFromEdit && savedScroll) {
+            // Delay để đảm bảo DOM đã render hoàn toàn
+            setTimeout(() => {
+                window.scrollTo({
+                    top: parseInt(savedScroll, 10),
+                    behavior: 'instant' // Scroll ngay lập tức, không smooth
+                });
+                sessionStorage.removeItem('adminDashboardScroll');
+                sessionStorage.removeItem('returningFromEdit');
+            }, 300); // Tăng delay lên 300ms để chắc chắn
+        }
+    }, [movies, loading]);
+
+    // Lọc phim theo tên
+    const filteredMovies = movies.filter((movie) =>
+        movie.title?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     if (loading) {
         return <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -528,96 +559,155 @@ export default function AdminDashboard() {
 
                 {/* Movies List */}
                 <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem' }}>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+                    {/* <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
                         📝 Danh Sách Phim ({movies.length})
-                    </h2>
+                    </h2> */}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
+                            📝 Danh Sách Phim ({searchTerm ? filteredMovies.length : movies.length})
+                        </h2>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            backgroundColor: '#374151',
+                            padding: '0.5rem 1rem',
+                            borderRadius: '0.375rem',
+                            border: '1px solid #4b5563',
+                            minWidth: '300px'
+                        }}>
+                            <span style={{ fontSize: '1.125rem' }}>🔍</span>
+                            <input
+                                type="text"
+                                placeholder="Tìm kiếm phim theo tên..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{
+                                    flex: 1,
+                                    background: 'transparent',
+                                    border: 'none',
+                                    outline: 'none',
+                                    color: 'white',
+                                    fontSize: '0.875rem'
+                                }}
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#9ca3af',
+                                        cursor: 'pointer',
+                                        fontSize: '1.125rem',
+                                        padding: '0.25rem'
+                                    }}
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {movies.map(movie => (
-                            <div key={movie.id} style={{
+                        {filteredMovies.length === 0 && searchTerm ? (
+                            <div style={{
+                                textAlign: 'center',
+                                padding: '3rem 2rem',
                                 backgroundColor: '#374151',
-                                padding: '1rem',
-                                borderRadius: '0.375rem',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center'
+                                borderRadius: '0.5rem',
+                                color: '#9ca3af'
                             }}>
-                                <div style={{ display: 'flex', gap: '1rem' }}>
-                                    <div style={{ position: 'relative' }}>
-                                        <img
-                                            src={movie.thumbnail}
-                                            alt={movie.title}
-                                            style={{
-                                                width: '6rem',
-                                                height: '9rem',
-                                                objectFit: 'cover',
-                                                borderRadius: '0.375rem'
-                                            }}
-                                        />
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '0.25rem',
-                                            left: '0.25rem',
-                                            backgroundColor: '#3b82f6',
-                                            color: 'white',
-                                            padding: '0.25rem 0.5rem',
-                                            borderRadius: '0.25rem',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 'bold'
-                                        }}>
-                                            {movie.totalEpisodes} tập
+                                <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>Không tìm thấy phim nào.</p>
+                                <p style={{ fontSize: '0.875rem' }}>Thử tìm kiếm với từ khóa khác.</p>
+                            </div>
+                        ) : (
+                            filteredMovies.map(movie => (
+                                <div key={movie.id} style={{
+                                    backgroundColor: '#374151',
+                                    padding: '1rem',
+                                    borderRadius: '0.375rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}>
+                                    <div style={{ display: 'flex', gap: '1rem' }}>
+                                        <div style={{ position: 'relative' }}>
+                                            <img
+                                                src={movie.thumbnail}
+                                                alt={movie.title}
+                                                style={{
+                                                    width: '6rem',
+                                                    height: '9rem',
+                                                    objectFit: 'cover',
+                                                    borderRadius: '0.375rem'
+                                                }}
+                                            />
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: '0.25rem',
+                                                left: '0.25rem',
+                                                backgroundColor: '#3b82f6',
+                                                color: 'white',
+                                                padding: '0.25rem 0.5rem',
+                                                borderRadius: '0.25rem',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                {movie.totalEpisodes} tập
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>{movie.title}</h3>
+                                            <p style={{ color: '#9ca3af', marginBottom: '0.25rem' }}>
+                                                {movie.category} • {movie.year} • {movie.totalEpisodes} tập
+                                            </p>
+                                            <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem', lineHeight: '1.4' }}>
+                                                {movie.description?.substring(0, 150)}...
+                                            </p>
+                                            <p style={{ color: '#6b7280', fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                                                ID: {movie.id}
+                                            </p>
                                         </div>
                                     </div>
-                                    <div>
-                                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>{movie.title}</h3>
-                                        <p style={{ color: '#9ca3af', marginBottom: '0.25rem' }}>
-                                            {movie.category} • {movie.year} • {movie.totalEpisodes} tập
-                                        </p>
-                                        <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem', lineHeight: '1.4' }}>
-                                            {movie.description?.substring(0, 150)}...
-                                        </p>
-                                        <p style={{ color: '#6b7280', fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                                            ID: {movie.id}
-                                        </p>
+
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button
+                                            onClick={() => goToMovieDetail(movie.id)}
+                                            style={{
+                                                backgroundColor: '#0ea5e9',
+                                                padding: '0.5rem 1rem',
+                                                borderRadius: '0.375rem',
+                                                border: 'none',
+                                                color: 'white',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            ✏️ Cập Nhật
+                                        </button>
+                                        <button
+                                            onClick={() => openConfirmModal({
+                                                title: `Xóa phim "${movie.title}"?`,
+                                                message: 'Thao tác này sẽ xóa toàn bộ tập của phim này và không thể hoàn tác.',
+                                                onConfirm: () => handleDeleteMovie(movie.id, movie.title)
+                                            })}
+                                            style={{
+                                                backgroundColor: '#dc2626',
+                                                padding: '0.5rem 1rem',
+                                                borderRadius: '0.375rem',
+                                                border: 'none',
+                                                color: 'white',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            🗑️ Xóa
+                                        </button>
                                     </div>
                                 </div>
-
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button
-                                        onClick={() => goToMovieDetail(movie.id)}
-                                        style={{
-                                            backgroundColor: '#0ea5e9',
-                                            padding: '0.5rem 1rem',
-                                            borderRadius: '0.375rem',
-                                            border: 'none',
-                                            color: 'white',
-                                            cursor: 'pointer',
-                                            whiteSpace: 'nowrap'
-                                        }}
-                                    >
-                                        ✏️ Cập Nhật
-                                    </button>
-                                    <button
-                                        onClick={() => openConfirmModal({
-                                            title: `Xóa phim "${movie.title}"?`,
-                                            message: 'Thao tác này sẽ xóa toàn bộ tập của phim này và không thể hoàn tác.',
-                                            onConfirm: () => handleDeleteMovie(movie.id, movie.title)
-                                        })}
-                                        style={{
-                                            backgroundColor: '#dc2626',
-                                            padding: '0.5rem 1rem',
-                                            borderRadius: '0.375rem',
-                                            border: 'none',
-                                            color: 'white',
-                                            cursor: 'pointer',
-                                            whiteSpace: 'nowrap'
-                                        }}
-                                    >
-                                        🗑️ Xóa
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                            )))}
 
                         {movies.length === 0 && (
                             <p style={{ color: '#9ca3af', textAlign: 'center', padding: '2rem' }}>

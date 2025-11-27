@@ -13,11 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Phim Hay - Đảo Phim Vietsub",
+  title: {
+    default: "NiceAnime",
+    template: "NiceAnime - %s",
+  },
   description: "Kho phim Vietsub chất lượng cao, cập nhật mỗi ngày",
   icons: {
-    icon: "/NiceAnime.png",
-    shortcut: "/NiceAnime.png",
+    icon: "/favicon-32x32.png",
+    shortcut: "/favicon-32x32.png",
     apple: "/NiceAnime.png",
   },
 };
