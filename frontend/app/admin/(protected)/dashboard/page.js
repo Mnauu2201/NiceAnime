@@ -890,6 +890,121 @@ export default function AdminDashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* Scroll to Top Button */}
+            {/* <button
+                onClick={() => {
+                    let animationFrameId = null;
+                    const scrollToTop = () => {
+                        const currentPosition = window.pageYOffset;
+                        if (currentPosition > 10) {
+                            window.scrollTo(0, currentPosition - Math.max(currentPosition / 8, 10));
+                            animationFrameId = requestAnimationFrame(scrollToTop);
+                        } else {
+                            window.scrollTo(0, 0);
+                            if (animationFrameId) {
+                                cancelAnimationFrame(animationFrameId);
+                            }
+                        }
+                    };
+                    scrollToTop();
+                }}
+                style={{
+                    position: 'fixed',
+                    bottom: '2rem',
+                    right: '2rem',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    width: '3.5rem',
+                    height: '3.5rem',
+                    borderRadius: '50%',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '1.5rem',
+                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
+                    transition: 'all 0.3s',
+                    zIndex: 50,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#2563eb';
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#3b82f6';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
+                }}
+            >
+                ⬆️
+            </button> */}
+
+            <button
+                onClick={() => {
+                    let animationFrameId = null;
+                    const scrollToTop = () => {
+                        const currentPosition = window.pageYOffset;
+                        if (currentPosition > 10) {
+                            window.scrollTo(0, currentPosition - Math.max(currentPosition / 8, 10));
+                            animationFrameId = requestAnimationFrame(scrollToTop);
+                        } else {
+                            window.scrollTo(0, 0);
+                            if (animationFrameId) {
+                                cancelAnimationFrame(animationFrameId);
+                            }
+                        }
+                    };
+                    scrollToTop();
+                }}
+                style={{
+                    position: 'fixed',
+                    bottom: '2rem',
+                    right: '2rem',
+                    background: 'linear-gradient(145deg, #3b82f6, #2563eb)',
+                    color: 'white',
+                    width: '3.5rem',
+                    height: '3.5rem',
+                    borderRadius: '1rem',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '1.75rem',
+                    fontWeight: 'bold',
+                    boxShadow: '0 8px 16px rgba(37, 99, 235, 0.4), inset 0 -2px 8px rgba(0, 0, 0, 0.2), inset 0 2px 8px rgba(255, 255, 255, 0.2)',
+                    transition: 'all 0.3s',
+                    zIndex: 50,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: 'perspective(100px) rotateX(5deg)',
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(145deg, #2563eb, #1d4ed8)';
+                    e.currentTarget.style.transform = 'perspective(100px) rotateX(5deg) translateY(-6px)';
+                    e.currentTarget.style.boxShadow = '0 12px 24px rgba(37, 99, 235, 0.6), inset 0 -2px 8px rgba(0, 0, 0, 0.3), inset 0 2px 8px rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(145deg, #3b82f6, #2563eb)';
+                    e.currentTarget.style.transform = 'perspective(100px) rotateX(5deg)';
+                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(37, 99, 235, 0.4), inset 0 -2px 8px rgba(0, 0, 0, 0.2), inset 0 2px 8px rgba(255, 255, 255, 0.2)';
+                }}
+                onMouseDown={(e) => {
+                    e.currentTarget.style.transform = 'perspective(100px) rotateX(5deg) translateY(-2px) scale(0.95)';
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(37, 99, 235, 0.4), inset 0 -1px 4px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseUp={(e) => {
+                    e.currentTarget.style.transform = 'perspective(100px) rotateX(5deg) translateY(-6px)';
+                    e.currentTarget.style.boxShadow = '0 12px 24px rgba(37, 99, 235, 0.6), inset 0 -2px 8px rgba(0, 0, 0, 0.3), inset 0 2px 8px rgba(255, 255, 255, 0.3)';
+                }}
+            >
+                ▲
+            </button>
+
         </div>
+
+
+
     );
 }

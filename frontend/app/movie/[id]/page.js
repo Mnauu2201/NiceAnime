@@ -96,20 +96,27 @@ export default function MovieDetail() {
     };
 
     const loadSuggestedMovies = async () => {
+        if (!movie) return; // Đảm bảo dữ liệu phim đã được load
         try {
-            // Lấy phim cùng thể loại - giới hạn 11 phim (sau khi loại bỏ phim hiện tại sẽ còn 10)
-            // LƯU Ý: Nếu category là mảng, Firebase không hỗ trợ where('category', '==', ['cat1', 'cat2'])
-            // Tạm thời chỉ lấy theo 'Anime' nếu category là mảng, hoặc lấy 10 phim mới nhất nếu không thể lọc
-            const categoryFilter = Array.isArray(movie.category) && movie.category.length > 0
-                ? 'Anime' // Giả định tạm thời nếu category là mảng
-                : movie.category;
+            // Chuẩn hóa category thành mảng để lọc
+            const categories = Array.isArray(movie.category)
+                ? movie.category
+                : (typeof movie.category === 'string'
+                    ? movie.category.split(',').map(c => c.trim()).filter(c => c)
+                    : []);
+
+            // Lọc theo thể loại đầu tiên hoặc 'Anime' nếu không có
+            const categoryFilter = categories.length > 0 ? categories[0] : 'Anime';
 
             let moviesQuery;
 
             if (categoryFilter) {
+                // Sửa: Lọc bằng array-contains và sắp xếp theo createdAt
+                // LƯU Ý: ĐÃ SỬA LẠI THÀNH array-contains VÀ CÓ orderBy ĐỂ SỬ DỤNG CHỈ MỤC BẠN VỪA TẠO
                 moviesQuery = query(
                     collection(db, 'movies'),
-                    where('category', '==', categoryFilter),
+                    where('category', 'array-contains', categoryFilter),
+                    orderBy('createdAt', 'desc'), // Cần thiết khi dùng where và limit
                     limit(11) // Lấy 11 phim để sau khi loại bỏ phim hiện tại còn 10
                 );
             } else {
@@ -424,7 +431,7 @@ export default function MovieDetail() {
                             marginBottom: '2rem',
                             flexWrap: 'wrap'
                         }}>
-                            {/* ** [BẮT ĐẦU THAY ĐỔI] **: Xử lý hiển thị category riêng biệt */}
+                            {/* Xử lý hiển thị category riêng biệt */}
                             {
                                 // Chuyển category thành mảng nếu là chuỗi, sau đó map ra các span riêng
                                 (Array.isArray(movie.category)
@@ -449,7 +456,6 @@ export default function MovieDetail() {
                                         </span>
                                     ))
                             }
-                            {/* ** [KẾT THÚC THAY ĐỔI] ** */}
 
                             <span style={{
                                 backgroundColor: '#166534',
@@ -515,8 +521,38 @@ export default function MovieDetail() {
                             gap: '1.5rem'
                         }}>
                             {suggestedMovies.map(suggestedMovie => {
-                                const totalEpisodes = suggestedMovie.totalEpisodes || suggestedMovie.episodes?.length || 1;
-                                const currentEp = suggestedMovie.currentEpisode || suggestedMovie.episodes?.length || totalEpisodes;
+
+                                // ** [LOGIC ĐÃ SỬA LẠI HOÀN TOÀN] Tính toán 2 trạng thái **
+                                const totalEpisodes = suggestedMovie.totalEpisodes || 1;
+                                const currentEpisodeCount = suggestedMovie.episodes?.length || 1;
+                                // Kiểm tra nếu tổng tập lớn hơn 1 hoặc bằng '??' (chưa rõ) thì là Phim Bộ
+                                const isMovieSeries = totalEpisodes > 1 || suggestedMovie.totalEpisodes === '??';
+
+                                // 1. Logic góc trái (Trạng thái tập: 11/11 hoặc X/Y)
+                                let episodeStatusText;
+                                let episodeStatusColor = '#3b82f6'; // Mặc định xanh dương
+
+                                if (isMovieSeries) {
+                                    // Phim Bộ:
+                                    // totalEpisodes là một chuỗi '??' hoặc số tập hiện có nhỏ hơn tổng tập đã đặt
+                                    if (suggestedMovie.totalEpisodes === '??' || currentEpisodeCount < totalEpisodes) {
+                                        episodeStatusText = `${currentEpisodeCount}/${totalEpisodes}`;
+                                        episodeStatusColor = '#f59e0b'; // Màu vàng cho trạng thái Đang cập nhật
+                                    } else {
+                                        // Đã hoàn thành (currentEpisodeCount >= totalEpisodes): Hiển thị TỔNG SỐ TẬP / TỔNG SỐ TẬP
+                                        episodeStatusText = `${totalEpisodes}/${totalEpisodes}`; // Ví dụ: 200/200
+                                        episodeStatusColor = '#10b981'; // Màu xanh lá cho trạng thái Hoàn thành
+                                    }
+                                } else {
+                                    // Phim Lẻ: Hiển thị 1/1
+                                    episodeStatusText = '1/1';
+                                    episodeStatusColor = '#ef4444'; // Màu đỏ cho Phim Lẻ
+                                }
+
+                                // 2. Logic góc phải (Loại phim: Phim Lẻ/Bộ)
+                                let typeStatusText = isMovieSeries ? 'Phim Bộ' : 'Phim Lẻ';
+                                let typeStatusColor = isMovieSeries ? '#3b82f6' : '#ef4444'; // Xanh dương cho Bộ, Đỏ cho Lẻ
+                                // ** [KẾT THÚC LOGIC ĐÃ SỬA LẠI HOÀN TOÀN] **
 
                                 return (
                                     <Link
@@ -553,11 +589,13 @@ export default function MovieDetail() {
                                                     unoptimized
                                                 />
                                             </div>
+
+                                            {/* ** GÓC TRÊN BÊN TRÁI: Trạng thái tập (11/11, 1/1, 1/200) ** */}
                                             <div style={{
                                                 position: 'absolute',
                                                 top: '0.75rem',
                                                 left: '0.75rem',
-                                                backgroundColor: 'rgba(59, 130, 246, 0.95)',
+                                                backgroundColor: episodeStatusColor, // Màu động (Xanh lá, Vàng, Đỏ)
                                                 color: 'white',
                                                 padding: '0.35rem 0.75rem',
                                                 borderRadius: '999px',
@@ -566,8 +604,27 @@ export default function MovieDetail() {
                                                 boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                                                 zIndex: 5
                                             }}>
-                                                {currentEp} / {totalEpisodes === '??' ? '??' : totalEpisodes}
+                                                {episodeStatusText}
                                             </div>
+
+                                            {/* ** GÓC TRÊN BÊN PHẢI: Loại Phim (Phim Lẻ/Bộ) ** */}
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: '0.75rem',
+                                                right: '0.75rem',
+                                                backgroundColor: typeStatusColor, // Xanh dương hoặc Đỏ
+                                                color: 'white',
+                                                padding: '0.35rem 0.75rem',
+                                                borderRadius: '999px',
+                                                fontSize: '0.85rem',
+                                                fontWeight: 'bold',
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                                zIndex: 5
+                                            }}>
+                                                {typeStatusText}
+                                            </div>
+                                            {/* ** KẾT THÚC CÁC THẺ TRẠNG THÁI ** */}
+
                                             <div style={{
                                                 position: 'absolute',
                                                 inset: 0,
@@ -596,8 +653,7 @@ export default function MovieDetail() {
                                                     flexWrap: 'wrap'
                                                 }}>
                                                     <span>📅 {suggestedMovie.year}</span>
-                                                    <span>•</span>
-                                                    {/* Hiển thị category của phim gợi ý (đã được định dạng ở loadSuggestedMovies) */}
+                                                    <span></span>
                                                     <span>🎭 {suggestedMovie.category}</span>
                                                 </div>
                                             </div>
@@ -718,10 +774,10 @@ export default function MovieDetail() {
                                 flexDirection: 'column',
                                 gap: '0.75rem'
                             }}>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Chính sách bảo mật</a></li>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Điều khoản sử dụng</a></li>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Giới thiệu</a></li>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Liên hệ</a></li>
+                                <li><a href="/support/privacy" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Chính sách bảo mật</a></li>
+                                <li><a href="/support/terms" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Điều khoản sử dụng</a></li>
+                                <li><a href="/support/about" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Giới thiệu</a></li>
+                                <li><a href="/support/contact" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Liên hệ</a></li>
                             </ul>
                         </div>
                     </div>
