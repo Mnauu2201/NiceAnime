@@ -10,6 +10,9 @@ export default function Home() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    // ** [THAY ĐỔI MỚI 1/3] **: Thêm state cho bộ lọc định dạng (Phim bộ / Phim lẻ)
+    const [filterFormat, setFilterFormat] = useState(''); // '', 'Phim bộ', 'Phim lẻ'
+
     const MOVIES_PER_PAGE = 20;
 
     useEffect(() => {
@@ -28,7 +31,9 @@ export default function Home() {
             const querySnapshot = await getDocs(q);
             const moviesList = querySnapshot.docs.map((docSnap) => ({
                 id: docSnap.id,
+                // Đảm bảo category là mảng khi load
                 ...docSnap.data(),
+                category: Array.isArray(docSnap.data().category) ? docSnap.data().category : [docSnap.data().category].filter(Boolean)
             }));
 
             setMovies(moviesList);
@@ -40,11 +45,26 @@ export default function Home() {
     };
 
     const filteredMovies = useMemo(() => {
-        if (!searchTerm.trim()) return movies;
-        return movies.filter((movie) =>
-            movie.title?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [movies, searchTerm]);
+        let currentMovies = movies;
+
+        // Lọc theo Tên (Search Term)
+        if (searchTerm.trim()) {
+            currentMovies = currentMovies.filter((movie) =>
+                movie.title?.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+
+        // ** [THAY ĐỔI MỚI 2/3] **: Lọc theo Định dạng (Phim bộ / Phim lẻ)
+        if (filterFormat) {
+            currentMovies = currentMovies.filter((movie) => {
+                // Sử dụng default 'Phim lẻ' cho các phim cũ chưa có trường format
+                const movieFormat = movie.format || 'Phim lẻ';
+                return movieFormat === filterFormat;
+            });
+        }
+
+        return currentMovies;
+    }, [movies, searchTerm, filterFormat]); // Thêm filterFormat vào dependency
 
     // Tính toán phân trang
     const totalPages = Math.ceil(filteredMovies.length / MOVIES_PER_PAGE);
@@ -52,12 +72,22 @@ export default function Home() {
     const endIndex = startIndex + MOVIES_PER_PAGE;
     const paginatedMovies = filteredMovies.slice(startIndex, endIndex);
 
-    // Reset về trang 1 khi search
+    // Reset về trang 1 khi search hoặc thay đổi filter
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm]);
+    }, [searchTerm, filterFormat]); // Thêm filterFormat vào dependency
 
     const featuredMovie = movies[0];
+
+    // Hàm xử lý khi nhấn nút lọc
+    const handleFormatFilter = (format) => {
+        // Nếu nhấn nút đang chọn, reset về trạng thái 'tất cả' ('')
+        if (filterFormat === format) {
+            setFilterFormat('');
+        } else {
+            setFilterFormat(format);
+        }
+    };
 
     if (loading) {
         return (
@@ -102,88 +132,54 @@ export default function Home() {
             color: 'white',
             fontFamily: 'Inter, system-ui, sans-serif'
         }}>
-            {/* <header style={{
+            {/* Header */}
+            <header style={{
                 position: 'fixed',
                 top: 0,
                 left: 0,
                 right: 0,
                 zIndex: 10,
-                background: 'rgba(5,6,11,0.85)',
-                borderBottom: '1px solid rgba(255,255,255,0.05)',
-                backdropFilter: 'blur(10px)'
+                background: 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
             }}>
                 <div style={{
                     maxWidth: '1300px',
                     margin: '0 auto',
-                    padding: '0.75rem 1.5rem',
+                    padding: '0.35rem 1.5rem',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between'
+                    justifyContent: 'space-between',
+                    minHeight: '72px'
                 }}>
-                    <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+                    <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: '0.75rem', overflow: 'visible', }}>
                         <Image
                             src="/NiceAnime-header.png"
                             alt="Phim Hay Logo"
-                            width={800} //160
-                            height={320} // 48
+                            width={600}
+                            height={180}
                             priority
-                            style={{ height: '120px', width: 'auto', maxWidth: 'none' }}
+                            style={{
+                                height: '72px',
+                                width: 'auto',
+                                // maxWidth: 'none',
+                                objectFit: 'contain',
+                                marginTop: '-6px',
+                                marginBottom: '-6px',
+                            }}
                         />
                     </Link>
-                    <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                    <div style={{
+                        color: '#f5f5f5',
+                        fontSize: '0.95rem',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                    }}>
                         Vietsub HD • Miễn phí • Cập nhật mỗi ngày
                     </div>
                 </div>
-            </header> */
-
-                <header style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 10,
-                    background: 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)', /* Đã thay đổi thành -90deg */
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
-                }}>
-                    <div style={{
-                        maxWidth: '1300px',
-                        margin: '0 auto',
-                        padding: '0.35rem 1.5rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        minHeight: '72px'
-                    }}>
-                        <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', gap: '0.75rem', overflow: 'visible', }}>
-                            <Image
-                                src="/NiceAnime-header.png"
-                                alt="Phim Hay Logo"
-                                width={600}
-                                height={180}
-                                priority
-                                style={{
-                                    height: '72px',
-                                    width: 'auto',
-                                    // maxWidth: 'none',
-                                    objectFit: 'contain',
-                                    marginTop: '-6px',
-                                    marginBottom: '-6px',
-                                }}
-                            />
-                        </Link>
-                        <div style={{
-                            color: '#f5f5f5',
-                            fontSize: '0.95rem',
-                            fontWeight: 600,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em'
-                        }}>
-                            Vietsub HD • Miễn phí • Cập nhật mỗi ngày
-                        </div>
-                    </div>
-                </header>
-            }
+            </header>
 
             {/* Hero Section */}
             <section style={{
@@ -303,7 +299,7 @@ export default function Home() {
 
             {/* Search Result */}
             <main style={{ maxWidth: '1300px', margin: '0 auto', padding: '2rem 1.5rem 4rem 1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
                     <div>
                         <h2 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '0.3rem' }}>
                             {searchTerm ? `Kết quả cho "${searchTerm}"` : '🔥 Phim mới cập nhật'}
@@ -313,6 +309,61 @@ export default function Home() {
                             {!searchTerm && totalPages > 1 && ` • Trang ${currentPage}/${totalPages}`}
                         </p>
                     </div>
+
+                    {/* ** [THAY ĐỔI MỚI 3/3] **: Thêm nút lọc Phim bộ/Phim lẻ */}
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        {/* <span style={{ fontSize: '1rem', fontWeight: '600', color: '#94a3b8' }}>Lọc theo:</span> */}
+                        <button
+                            onClick={() => handleFormatFilter('Phim bộ')}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                backgroundColor: filterFormat === 'Phim bộ' ? '#ea580c' : '#374151', // Màu cam khi active
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '999px',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '600',
+                                transition: 'background-color 0.2s',
+                            }}
+                        >
+                            Phim Bộ
+                        </button>
+                        <button
+                            onClick={() => handleFormatFilter('Phim lẻ')}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                backgroundColor: filterFormat === 'Phim lẻ' ? '#ef4444' : '#374151', // Màu đỏ khi active
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '999px',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '600',
+                                transition: 'background-color 0.2s',
+                            }}
+                        >
+                            Phim Lẻ
+                        </button>
+                        {filterFormat && (
+                            <button
+                                onClick={() => setFilterFormat('')}
+                                style={{
+                                    padding: '0.5rem 1rem',
+                                    backgroundColor: 'transparent',
+                                    color: '#94a3b8',
+                                    border: '1px solid #4b5563',
+                                    borderRadius: '999px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    fontWeight: '600',
+                                }}
+                            >
+                                Xóa Lọc
+                            </button>
+                        )}
+                    </div>
+                    {/* ** [KẾT THÚC THAY ĐỔI] ** */}
                 </div>
 
                 {movies.length === 0 ? (
@@ -351,6 +402,11 @@ export default function Home() {
                             const totalEpisodes = movie.totalEpisodes || movie.episodes?.length || 1;
                             const currentEpisode = movie.currentEpisode || movie.episodes?.length || totalEpisodes;
 
+                            // Định dạng Phim bộ/Phim lẻ (dùng lại logic đã thêm ở bước trước)
+                            const movieFormatRaw = movie.format || 'Phim lẻ';
+                            const movieFormat = movieFormatRaw === 'Phim bộ' ? 'BỘ' : 'LẺ';
+                            const formatColor = movieFormatRaw === 'Phim bộ' ? 'rgba(234, 88, 12, 0.95)' : 'rgba(239, 68, 68, 0.95)'; // Cam cho Bộ, Đỏ cho Lẻ
+
                             return (
                                 <Link
                                     // href={`/movie/${movie.id}`}
@@ -386,6 +442,7 @@ export default function Home() {
                                                 style={{ objectFit: 'cover' }}
                                             />
                                         </div>
+                                        {/* Badge Số tập (Top-Left) */}
                                         <div style={{
                                             position: 'absolute',
                                             top: '0.75rem',
@@ -396,10 +453,29 @@ export default function Home() {
                                             borderRadius: '999px',
                                             fontSize: '0.85rem',
                                             fontWeight: 'bold',
-                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                            zIndex: 5
                                         }}>
                                             {currentEpisode} / {totalEpisodes === '??' ? '??' : totalEpisodes}
                                         </div>
+
+                                        {/* Badge Định dạng (Top-Right) */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '0.75rem',
+                                            right: '0.75rem',
+                                            backgroundColor: formatColor, // Dùng màu đã xác định
+                                            color: 'white',
+                                            padding: '0.35rem 0.75rem',
+                                            borderRadius: '999px',
+                                            fontSize: '0.85rem',
+                                            fontWeight: 'bold',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                            zIndex: 5
+                                        }}>
+                                            {movieFormat}
+                                        </div>
+
                                         <div style={{
                                             position: 'absolute',
                                             inset: 0,
@@ -429,7 +505,11 @@ export default function Home() {
                                             }}>
                                                 <span>📅 {movie.year}</span>
                                                 <span>•</span>
-                                                <span>🎭 {movie.category}</span>
+                                                {/* ** START FIX: Phân cách các thể loại bằng dấu phẩy và khoảng trắng ** */}
+                                                <span>
+                                                    🎭 {Array.isArray(movie.category) ? movie.category.join(', ') : movie.category}
+                                                </span>
+                                                {/* ** END FIX ** */}
                                             </div>
                                         </div>
                                     </div>
@@ -530,15 +610,140 @@ export default function Home() {
 
             {/* Footer */}
             <footer style={{
-                backgroundColor: '#05060b',
+                backgroundColor: '#0a0d16',
                 borderTop: '1px solid #1e293b',
-                padding: '2rem 1rem',
-                textAlign: 'center',
+                padding: '3rem 1.5rem 2rem',
             }}>
-                <p style={{ color: '#64748b' }}>
-                    {/* © 2025 Phim Hay - Xem phim miễn phí • Made with ❤️ */}
-                    Copyright © {new Date().getFullYear()} by NiceAnime • Website made by Nguyen Quang Anh
-                </p>
+                <div style={{
+                    maxWidth: '1300px',
+                    margin: '0 auto',
+                }}>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                        gap: '3rem',
+                        marginBottom: '3rem',
+                    }}>
+                        <div>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                marginBottom: '1rem'
+                            }}>
+                                <Image
+                                    src="/NiceAnime-header.png"
+                                    alt="NiceAnime Logo"
+                                    width={120}
+                                    height={36}
+                                    style={{ height: '36px', width: 'auto' }}
+                                />
+                            </div>
+                            <p style={{
+                                color: '#94a3b8',
+                                fontSize: '0.9rem',
+                                lineHeight: '1.6',
+                                marginBottom: '1rem'
+                            }}>
+                                NiceAnime là nền tảng xem phim anime miễn phí hàng đầu, nơi bạn có thể khám phá hàng ngàn bộ phim với phụ đề Vietsub chất lượng cao được cập nhật liên tục mỗi ngày.
+                            </p>
+                        </div>
+
+                        <div>
+                            <h3 style={{
+                                color: 'white',
+                                fontSize: '1.1rem',
+                                fontWeight: '700',
+                                marginBottom: '1rem'
+                            }}>
+                                Danh Mục
+                            </h3>
+                            <ul style={{
+                                listStyle: 'none',
+                                padding: 0,
+                                margin: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem'
+                            }}>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Mới (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Hay (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Vietsub (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Phim Kinh Dị (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime HD (Đang Cập Nhật)</a></li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h3 style={{
+                                color: 'white',
+                                fontSize: '1.1rem',
+                                fontWeight: '700',
+                                marginBottom: '1rem'
+                            }}>
+                                Thể Loại
+                            </h3>
+                            <ul style={{
+                                listStyle: 'none',
+                                padding: 0,
+                                margin: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem'
+                            }}>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hành Động (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Phiêu Lưu (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hài Hước (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Lãng Mạn (Đang Cập Nhật)</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Học Đường (Đang Cập Nhật)</a></li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h3 style={{
+                                color: 'white',
+                                fontSize: '1.1rem',
+                                fontWeight: '700',
+                                marginBottom: '1rem'
+                            }}>
+                                Hỗ Trợ
+                            </h3>
+                            <ul style={{
+                                listStyle: 'none',
+                                padding: 0,
+                                margin: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem'
+                            }}>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Chính sách bảo mật</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Điều khoản sử dụng</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Giới thiệu</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Liên hệ</a></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div style={{
+                        paddingTop: '2rem',
+                        borderTop: '1px solid #1e293b',
+                        textAlign: 'center'
+                    }}>
+                        <p style={{
+                            color: '#64748b',
+                            fontSize: '0.9rem',
+                            marginBottom: '0.5rem'
+                        }}>
+                            Copyright © {new Date().getFullYear()} by NiceAnime - All rights reserved.
+                        </p>
+                        <p style={{
+                            color: '#475569',
+                            fontSize: '0.85rem'
+                        }}>
+                            Website made by Nguyen Quang Anh
+                        </p>
+                    </div>
+                </div>
             </footer>
         </div>
     );

@@ -7,6 +7,25 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { slugify } from '@/lib/utils';
 
+// ** [START] THÊM MỚI (1/7): Định nghĩa danh sách Thể loại **
+const CATEGORIES = [
+    "Anime",
+    "Hành Động",
+    "Phiêu Lưu",
+    "Hài",
+    "Hoạt Hình",
+    "Giả Tưởng",
+    "Kinh Dị",
+    "Khoa Học Viễn Tưởng",
+    "Tâm Lý",
+    "Tình Cảm",
+    "Gay Cấn",
+    "Bí Ẩn",
+    "Lãng Mạn",
+    "Tài Liệu"
+];
+// ** [END] THÊM MỚI **
+
 const formatDateTimeInput = (value) => {
     if (!value) return '';
     const date = value.seconds ? new Date(value.seconds * 1000) : new Date(value);
@@ -27,12 +46,21 @@ export default function MovieDetailPage({ params }) {
 
     const [loading, setLoading] = useState(true);
     const [movie, setMovie] = useState(null);
+    // ** [START] THÊM MỚI (2/7): State điều khiển Dropdown Category & Ref **
+    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+    // ** [END] THÊM MỚI **
+
     const [formData, setFormData] = useState({
         title: '',
         thumbnail: '',
-        category: '',
+        // ** THAY ĐỔI: category là mảng (Array) **
+        category: [],
         year: new Date().getFullYear(),
         description: '',
+        // ** [START] THAY ĐỔI: Thêm trường format (Phim lẻ/Phim bộ) **
+        format: 'Phim lẻ', // Mặc định là Phim lẻ
+        // ** [END] THAY ĐỔI **
         totalEpisodes: 1,
         createdAt: ''
     });
@@ -48,6 +76,19 @@ export default function MovieDetailPage({ params }) {
     const [notification, setNotification] = useState({ message: '', type: 'success', visible: false });
     const notificationTimer = useRef(null);
     const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null, loading: false });
+
+    // ** [START] THÊM MỚI (3/7): Xử lý đóng Dropdown khi click ra ngoài **
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsCategoryDropdownOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [dropdownRef]);
+    // ** [END] THÊM MỚI **
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -84,13 +125,28 @@ export default function MovieDetailPage({ params }) {
                 await updateDoc(doc(db, 'movies', movieId), { slug });
             }
 
+            // ** THAY ĐỔI: Chuyển category từ string (dữ liệu cũ) sang mảng (dữ liệu mới) **
+            let categoryArray = [];
+            if (Array.isArray(movieData.category)) {
+                categoryArray = movieData.category;
+            } else if (typeof movieData.category === 'string' && movieData.category) {
+                // Giả định nếu là string thì có thể là string ngăn cách bằng phẩy
+                categoryArray = movieData.category.split(',').map(c => c.trim()).filter(Boolean);
+            } else {
+                categoryArray = ['Anime']; // Giá trị mặc định nếu không có gì
+            }
+            // ** END THAY ĐỔI **
+
             setFormData({
                 title: movieData.title || '',
                 thumbnail: movieData.thumbnail || '',
-                category: movieData.category || 'Anime',
+                category: categoryArray, // Sử dụng mảng đã xử lý
                 year: movieData.year || new Date().getFullYear(),
                 description: movieData.description || '',
                 totalEpisodes: movieData.totalEpisodes || 1,
+                // ** [START] THAY ĐỔI: Load định dạng phim (format) **
+                format: movieData.format || 'Phim lẻ', // Load format, mặc định là Phim lẻ
+                // ** [END] THAY ĐỔI **
                 createdAt: formatDateTimeInput(movieData.createdAt)
             });
             await loadEpisodes();
@@ -163,6 +219,13 @@ export default function MovieDetailPage({ params }) {
 
     const handleUpdateMovie = async (e) => {
         e.preventDefault();
+        // ** THÊM: Kiểm tra chọn ít nhất 1 thể loại **
+        if (!Array.isArray(formData.category) || formData.category.length === 0) {
+            showNotification('Vui lòng chọn ít nhất một thể loại!', 'error');
+            return;
+        }
+        // ** END THÊM **
+
         setSavingMovie(true);
         try {
             const slug = slugify(formData.title);
@@ -170,9 +233,12 @@ export default function MovieDetailPage({ params }) {
                 title: formData.title,
                 slug: slug, // Tự động tạo slug khi cập nhật
                 thumbnail: formData.thumbnail,
-                category: formData.category,
+                category: formData.category, // Category đã là mảng
                 year: parseInt(formData.year) || new Date().getFullYear(),
                 description: formData.description,
+                // ** [START] THAY ĐỔI: Lưu định dạng phim (format) **
+                format: formData.format, // Lưu định dạng phim
+                // ** [END] THAY ĐỔI **
                 totalEpisodes: parseInt(formData.totalEpisodes) || 1,
                 createdAt: parseDateTimeInput(formData.createdAt)
             });
@@ -297,6 +363,29 @@ export default function MovieDetailPage({ params }) {
         });
     };
 
+    // ** [START] THÊM MỚI (4/7): Hàm xử lý Checkbox (Thêm/Xóa phần tử khỏi mảng) **
+    const handleCategoryChange = (value, isChecked) => {
+        setFormData((prevFormData) => {
+            // Đảm bảo prevFormData.category là mảng trước khi xử lý
+            const currentCategories = Array.isArray(prevFormData.category) ? prevFormData.category : [];
+
+            if (isChecked) {
+                // Thêm thể loại nếu được tích chọn
+                return {
+                    ...prevFormData,
+                    category: [...currentCategories, value].filter((v, i, a) => a.indexOf(v) === i), // Loại bỏ trùng lặp
+                };
+            } else {
+                // Xóa thể loại nếu bỏ tích chọn
+                return {
+                    ...prevFormData,
+                    category: currentCategories.filter((cat) => cat !== value),
+                };
+            }
+        });
+    };
+    // ** [END] THÊM MỚI **
+
     const handleDeleteMovie = () => {
         openConfirmModal({
             title: `Xóa phim "${movie?.title}"?`,
@@ -322,8 +411,22 @@ export default function MovieDetailPage({ params }) {
         );
     }
 
+    // ** [START] THÊM MỚI (5/7): Hàm hiển thị category đã chọn trong ô input **
+    const getCategoryDisplay = () => {
+        const categories = Array.isArray(formData.category) ? formData.category : [];
+        if (categories.length === 0) {
+            return "Chọn thể loại...";
+        }
+        if (categories.length === 1) {
+            return categories[0];
+        }
+        return `${categories.length} thể loại đã chọn: ${categories.join(', ')}`;
+    };
+    // ** [END] THÊM MỚI **
+
     return (
         <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: 'white', padding: '2rem', position: 'relative' }}>
+            {/* ... Notification Modal ... */}
             {notification.visible && (
                 <div
                     onClick={hideNotification}
@@ -348,6 +451,7 @@ export default function MovieDetailPage({ params }) {
                 </div>
             )}
 
+            {/* ... Confirm Modal ... */}
             {confirmModal.open && (
                 <div style={{
                     position: 'fixed',
@@ -462,16 +566,103 @@ export default function MovieDetailPage({ params }) {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-                            <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thể loại</label>
-                                <input
-                                    type="text"
-                                    value={formData.category}
-                                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                />
+                        {/* ** [START] THAY ĐỔI (6/7): Cấu trúc lại grid thành 5 cột để thêm Định dạng phim ** */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: '1rem' }}>
+                            <div ref={dropdownRef} style={{ position: 'relative' }}>
+                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thể loại (Có thể chọn nhiều)</label>
+
+                                {/* Input/Display Field */}
+                                <div
+                                    onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.375rem',
+                                        backgroundColor: '#374151',
+                                        color: formData.category.length === 0 ? '#9ca3af' : 'white',
+                                        border: '1px solid #4b5563',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        minHeight: '40px'
+                                    }}
+                                >
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90%' }}>
+                                        {getCategoryDisplay()}
+                                    </span>
+                                    <span style={{
+                                        transform: isCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                        transition: 'transform 0.2s',
+                                    }}>
+                                        ▼
+                                    </span>
+                                </div>
+
+                                {/* Dropdown Menu */}
+                                {isCategoryDropdownOpen && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: 0,
+                                        right: 0,
+                                        marginTop: '0.25rem',
+                                        backgroundColor: '#1f2937',
+                                        border: '1px solid #4b5563',
+                                        borderRadius: '0.375rem',
+                                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                        zIndex: 10,
+                                        maxHeight: '250px',
+                                        overflowY: 'auto',
+                                        padding: '0.5rem',
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(2, 1fr)',
+                                        gap: '0.5rem'
+                                    }}>
+                                        {CATEGORIES.map((cat) => (
+                                            <div
+                                                key={cat}
+                                                onClick={() => handleCategoryChange(cat, !formData.category.includes(cat))}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    padding: '0.3rem 0.5rem',
+                                                    borderRadius: '0.25rem',
+                                                    cursor: 'pointer',
+                                                    backgroundColor: formData.category.includes(cat) ? '#3b82f6' : 'transparent',
+                                                    color: 'white',
+                                                    transition: 'background-color 0.1s',
+                                                }}
+                                            >
+                                                {/* Dấu tích V */}
+                                                <span style={{
+                                                    marginRight: '0.5rem',
+                                                    color: 'white',
+                                                    minWidth: '1rem'
+                                                }}>
+                                                    {formData.category.includes(cat) ? '✓' : ''}
+                                                </span>
+                                                <span style={{ flex: 1 }}>{cat}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
+
+                            {/* [NEW] Định dạng phim */}
+                            <div>
+                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Định dạng</label>
+                                <select
+                                    value={formData.format}
+                                    onChange={(e) => setFormData({ ...formData, format: e.target.value })}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563', height: '40px' }}
+                                >
+                                    <option value="Phim lẻ">Phim lẻ</option>
+                                    <option value="Phim bộ">Phim bộ</option>
+                                </select>
+                            </div>
+
+                            {/* Năm */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Năm</label>
                                 <input
@@ -481,6 +672,7 @@ export default function MovieDetailPage({ params }) {
                                     style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
                                 />
                             </div>
+                            {/* Tổng tập */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tổng tập</label>
                                 <input
@@ -490,6 +682,7 @@ export default function MovieDetailPage({ params }) {
                                     style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
                                 />
                             </div>
+                            {/* Created At */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Created At</label>
                                 <input
@@ -500,6 +693,7 @@ export default function MovieDetailPage({ params }) {
                                 />
                             </div>
                         </div>
+                        {/* ** [END] THAY ĐỔI ** */}
 
                         <div>
                             <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Mô tả</label>
@@ -541,13 +735,15 @@ export default function MovieDetailPage({ params }) {
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                             {episodes.length === 0 && <p style={{ color: '#94a3b8' }}>Chưa có tập nào.</p>}
+                            {/* ... Phần hiển thị danh sách tập giữ nguyên ... */}
                             {episodes.map((episode) => (
                                 <div key={episode.id} style={{ backgroundColor: '#111827', padding: '1rem', borderRadius: '0.5rem' }}>
                                     <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1.5fr 1fr 1fr', gap: '0.5rem', alignItems: 'center' }}>
                                         <input
                                             type="number"
                                             value={episode.episodeNumber}
-                                            onChange={(e) => handleNewEpisodeNumberChange(e.target.value)}
+                                            // ** THAY ĐỔI: Sử dụng handleEpisodeFieldChange cho episodeNumber **
+                                            onChange={(e) => handleEpisodeFieldChange(episode.id, 'episodeNumber', e.target.value)}
                                             placeholder="Số tập"
                                             style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
                                         />
@@ -643,4 +839,3 @@ export default function MovieDetailPage({ params }) {
         </div>
     );
 }
-

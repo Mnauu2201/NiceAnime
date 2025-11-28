@@ -18,12 +18,40 @@ export default function AdminDashboard() {
     const router = useRouter();
     const [searchTerm, setSearchTerm] = useState('');
 
+    // ** [START] THÊM MỚI (1/8): State điều khiển Dropdown Category **
+    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null); // Ref cho Custom Dropdown
+    // ** [END] THÊM MỚI **
+
+    // ** [START] THÊM MỚI (2/8): Định nghĩa danh sách Thể loại **
+    const CATEGORIES = [
+        "Anime",
+        "Hành Động",
+        "Phiêu Lưu",
+        "Hài",
+        "Hoạt Hình",
+        "Giả Tưởng",
+        "Kinh Dị",
+        "Khoa Học Viễn Tưởng",
+        "Tâm Lý",
+        "Tình Cảm",
+        "Gay Cấn",
+        "Bí Ẩn",
+        "Lãng Mạn",
+        "Tài Liệu"
+    ];
+    // ** [END] THÊM MỚI **
+
     const [formData, setFormData] = useState({
         title: '',
         thumbnail: '',
-        category: 'Anime',
+        // Category là MẢNG để lưu nhiều giá trị
+        category: ['Anime'],
         year: new Date().getFullYear(),
         description: '',
+        // ** [START] THAY ĐỔI: Thêm trường format (Phim lẻ/Phim bộ) **
+        format: 'Phim lẻ', // Mặc định là Phim lẻ
+        // ** [END] THAY ĐỔI **
         totalEpisodes: 1
     });
 
@@ -36,7 +64,12 @@ export default function AdminDashboard() {
             const querySnapshot = await getDocs(collection(db, 'movies'));
             const moviesList = querySnapshot.docs.map(doc => ({
                 id: doc.id,
-                ...doc.data()
+                // ** [START] THAY ĐỔI (3/8): Đảm bảo category là mảng khi load (phòng trường hợp cũ là string) **
+                ...doc.data(),
+                category: Array.isArray(doc.data().category) ? doc.data().category : [doc.data().category].filter(Boolean),
+                // Đảm bảo format có giá trị mặc định nếu không có trong DB
+                format: doc.data().format || 'Phim lẻ'
+                // ** [END] THAY ĐỔI **
             }));
             setMovies(moviesList);
         } catch (error) {
@@ -56,6 +89,19 @@ export default function AdminDashboard() {
 
         return () => unsubscribe();
     }, [router]);
+
+    // ** [START] THÊM MỚI (4/8): Xử lý đóng Dropdown khi click ra ngoài **
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsCategoryDropdownOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [dropdownRef]);
+    // ** [END] THÊM MỚI **
 
     const showNotification = (message, type = 'success') => {
         if (notificationTimer.current) {
@@ -107,6 +153,26 @@ export default function AdminDashboard() {
         setEpisodes(newEpisodes);
     };
 
+    // ** [START] THAY ĐỔI (5/8): Hàm xử lý Checkbox (Thêm/Xóa phần tử khỏi mảng) **
+    const handleCategoryChange = (value, isChecked) => {
+        setFormData((prevFormData) => {
+            if (isChecked) {
+                // Thêm thể loại nếu được tích chọn
+                return {
+                    ...prevFormData,
+                    category: [...prevFormData.category, value],
+                };
+            } else {
+                // Xóa thể loại nếu bỏ tích chọn
+                return {
+                    ...prevFormData,
+                    category: prevFormData.category.filter((cat) => cat !== value),
+                };
+            }
+        });
+    };
+    // ** [END] THAY ĐỔI **
+
     const handleAddMovie = async (e) => {
         e.preventDefault();
 
@@ -115,6 +181,13 @@ export default function AdminDashboard() {
             showNotification(`Vui lòng điền link video cho tất cả ${formData.totalEpisodes} tập!`, 'error');
             return;
         }
+
+        // ** [START] THAY ĐỔI (6/8): Kiểm tra chọn ít nhất 1 thể loại **
+        if (!Array.isArray(formData.category) || formData.category.length === 0) {
+            showNotification('Vui lòng chọn ít nhất một thể loại!', 'error');
+            return;
+        }
+        // ** [END] THAY ĐỔI **
 
         setUploading(true);
 
@@ -125,9 +198,12 @@ export default function AdminDashboard() {
                 title: formData.title,
                 slug: slug, // Thêm slug để dùng trong URL
                 thumbnail: formData.thumbnail,
-                category: formData.category,
+                category: formData.category, // Dữ liệu category đã là mảng
                 year: formData.year,
                 description: formData.description,
+                // ** [START] THÊM MỚI: Lưu định dạng phim **
+                format: formData.format, // Lưu định dạng phim (Phim lẻ/Phim bộ)
+                // ** [END] THÊM MỚI **
                 totalEpisodes: formData.totalEpisodes,
                 createdAt: new Date()
             });
@@ -155,14 +231,17 @@ export default function AdminDashboard() {
             showNotification(`Thêm phim "${formData.title}" với ${formData.totalEpisodes} tập thành công!`, 'success');
 
             // Reset form
+            // ** [START] THAY ĐỔI (7/8): Reset category và format về mặc định **
             setFormData({
                 title: '',
                 thumbnail: '',
-                category: 'Anime',
+                category: ['Anime'], // Reset về mảng
                 year: new Date().getFullYear(),
                 description: '',
+                format: 'Phim lẻ', // Reset format về mặc định
                 totalEpisodes: 1
             });
+            // ** [END] THAY ĐỔI **
             setEpisodes([{ episodeNumber: 1, title: 'Tập 1', videoUrl: '' }]);
 
             loadMovies();
@@ -266,6 +345,19 @@ export default function AdminDashboard() {
             <p>Loading...</p>
         </div>;
     }
+
+    // ** [START] THÊM MỚI (8/8): Hàm hiển thị category đã chọn trong ô input **
+    const getCategoryDisplay = () => {
+        if (!Array.isArray(formData.category) || formData.category.length === 0) {
+            return "Chọn thể loại...";
+        }
+        if (formData.category.length === 1) {
+            return formData.category[0];
+        }
+        return `${formData.category.length} thể loại đã chọn`;
+    };
+    // ** [END] THÊM MỚI **
+
 
     return (
         <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', padding: '2rem', position: 'relative' }}>
@@ -374,7 +466,7 @@ export default function AdminDashboard() {
                 }}>
                     <p style={{ margin: 0, fontSize: '0.875rem', lineHeight: '1.5' }}>
                         💡 <strong>Cấu trúc Firebase tối ưu:</strong><br />
-                        • Collection <code style={{ backgroundColor: '#1e293b', padding: '0.125rem 0.375rem', borderRadius: '0.25rem' }}>movies</code>: Lưu thông tin cơ bản phim<br />
+                        • Collection <code style={{ backgroundColor: '#1e293b', padding: '0.125rem 0.375rem', borderRadius: '0.25rem' }}>movies</code>: Lưu thông tin cơ bản phim (Category là **Mảng**)<br />
                         • Collection <code style={{ backgroundColor: '#1e293b', padding: '0.125rem 0.375rem', borderRadius: '0.25rem' }}>episodes</code>: Mỗi tập là 1 document riêng → Tiết kiệm băng thông & nhanh hơn!
                     </p>
                 </div>
@@ -413,25 +505,105 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        {/* ** [START] THAY ĐỔI: Điều chỉnh layout thành 4 cột để thêm Định dạng phim ** */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+
+                            {/* 1. Category Dropdown */}
+                            <div ref={dropdownRef} style={{ position: 'relative' }}>
+                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thể loại (Có thể chọn nhiều) *</label>
+
+                                {/* Input/Display Field */}
+                                <div
+                                    onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.375rem',
+                                        backgroundColor: '#374151',
+                                        color: formData.category.length === 0 ? '#9ca3af' : 'white',
+                                        border: '1px solid #4b5563',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                    }}
+                                >
+                                    <span>{getCategoryDisplay()}</span>
+                                    <span style={{
+                                        transform: isCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                        transition: 'transform 0.2s',
+                                    }}>
+                                        ▼
+                                    </span>
+                                </div>
+
+                                {/* Dropdown Menu */}
+                                {isCategoryDropdownOpen && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: 0,
+                                        right: 0,
+                                        marginTop: '0.25rem',
+                                        backgroundColor: '#1f2937',
+                                        border: '1px solid #4b5563',
+                                        borderRadius: '0.375rem',
+                                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                        zIndex: 10,
+                                        maxHeight: '250px',
+                                        overflowY: 'auto',
+                                        padding: '0.5rem',
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(2, 1fr)', // Chia 2 cột cho gọn
+                                        gap: '0.5rem'
+                                    }}>
+                                        {CATEGORIES.map((cat) => (
+                                            <div
+                                                key={cat}
+                                                onClick={() => handleCategoryChange(cat, !formData.category.includes(cat))}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    padding: '0.3rem 0.5rem',
+                                                    borderRadius: '0.25rem',
+                                                    cursor: 'pointer',
+                                                    backgroundColor: formData.category.includes(cat) ? '#3b82f6' : 'transparent',
+                                                    color: 'white',
+                                                    transition: 'background-color 0.1s',
+                                                }}
+                                            >
+                                                {/* Dấu tích V */}
+                                                <span style={{
+                                                    marginRight: '0.5rem',
+                                                    color: 'white',
+                                                    minWidth: '1rem'
+                                                }}>
+                                                    {formData.category.includes(cat) ? '✓' : ''}
+                                                </span>
+                                                <span style={{ flex: 1 }}>{cat}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            {/* ** [END] THAY ĐỔI: Custom Dropdown chọn nhiều Thể loại ** */}
+
+                            {/* 2. Format Selector (THÊM MỚI) */}
                             <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thể loại</label>
+                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Định dạng phim *</label>
                                 <select
-                                    value={formData.category}
-                                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                    value={formData.format}
+                                    onChange={(e) => setFormData({ ...formData, format: e.target.value })}
                                     style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                    required
                                     disabled={uploading}
                                 >
-                                    <option>Anime</option>
-                                    <option>Hành động</option>
-                                    <option>Tình cảm</option>
-                                    <option>Hài</option>
-                                    <option>Kinh dị</option>
-                                    <option>Khoa học viễn tưởng</option>
-                                    <option>Hoạt hình</option>
+                                    <option value="Phim lẻ">Phim lẻ</option>
+                                    <option value="Phim bộ">Phim bộ</option>
                                 </select>
                             </div>
 
+                            {/* 3. Năm Input */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Năm</label>
                                 <input
@@ -443,6 +615,7 @@ export default function AdminDashboard() {
                                 />
                             </div>
 
+                            {/* 4. Total Episodes Input */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tổng số tập *</label>
                                 <input
@@ -457,6 +630,7 @@ export default function AdminDashboard() {
                                 />
                             </div>
                         </div>
+                        {/* ** [END] THAY ĐỔI ** */}
 
                         <div style={{ marginBottom: '1rem' }}>
                             <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Mô tả</label>
@@ -559,10 +733,6 @@ export default function AdminDashboard() {
 
                 {/* Movies List */}
                 <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem' }}>
-                    {/* <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-                        📝 Danh Sách Phim ({movies.length})
-                    </h2> */}
-
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                         <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
                             📝 Danh Sách Phim ({searchTerm ? filteredMovies.length : movies.length})
@@ -661,7 +831,10 @@ export default function AdminDashboard() {
                                         <div>
                                             <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>{movie.title}</h3>
                                             <p style={{ color: '#9ca3af', marginBottom: '0.25rem' }}>
-                                                {movie.category} • {movie.year} • {movie.totalEpisodes} tập
+                                                {/* ** [START] THÊM MỚI: Hiển thị định dạng phim ** */}
+                                                <strong>Định dạng:</strong> {movie.format || 'N/A'} •
+                                                {/* ** [END] THÊM MỚI ** */}
+                                                <strong>Thể loại:</strong> {Array.isArray(movie.category) ? movie.category.join(', ') : movie.category} • {movie.year} • {movie.totalEpisodes} tập
                                             </p>
                                             <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem', lineHeight: '1.4' }}>
                                                 {movie.description?.substring(0, 150)}...
