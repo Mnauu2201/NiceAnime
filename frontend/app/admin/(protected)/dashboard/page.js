@@ -38,7 +38,12 @@ export default function AdminDashboard() {
         "Gay Cấn",
         "Bí Ẩn",
         "Lãng Mạn",
-        "Tài Liệu"
+        "Tài Liệu",
+        "Hình Sự",
+        "Gia Đình",
+        "Chính Kịch",
+        "Lịch Sử",
+        "Chiến Tranh"
     ];
     // ** [END] THÊM MỚI **
 
@@ -963,7 +968,7 @@ export default function AdminDashboard() {
                     position: 'fixed',
                     bottom: '2rem',
                     right: '2rem',
-                    background: 'linear-gradient(145deg, #3b82f6, #2563eb)',
+                    background: 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)',
                     color: 'white',
                     width: '3.5rem',
                     height: '3.5rem',
@@ -981,12 +986,12 @@ export default function AdminDashboard() {
                     transform: 'perspective(100px) rotateX(5deg)',
                 }}
                 onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(145deg, #2563eb, #1d4ed8)';
+                    e.currentTarget.style.background = 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)';
                     e.currentTarget.style.transform = 'perspective(100px) rotateX(5deg) translateY(-6px)';
                     e.currentTarget.style.boxShadow = '0 12px 24px rgba(37, 99, 235, 0.6), inset 0 -2px 8px rgba(0, 0, 0, 0.3), inset 0 2px 8px rgba(255, 255, 255, 0.3)';
                 }}
                 onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(145deg, #3b82f6, #2563eb)';
+                    e.currentTarget.style.background = 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)';
                     e.currentTarget.style.transform = 'perspective(100px) rotateX(5deg)';
                     e.currentTarget.style.boxShadow = '0 8px 16px rgba(37, 99, 235, 0.4), inset 0 -2px 8px rgba(0, 0, 0, 0.2), inset 0 2px 8px rgba(255, 255, 255, 0.2)';
                 }}

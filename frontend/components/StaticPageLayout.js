@@ -103,7 +103,8 @@ export default function StaticPageLayout({ title, children }) {
                 }}>
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                        // Thay đổi cấu trúc lưới để chứa 5 cột (hoặc 4 cột nếu cần)
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                         gap: '3rem',
                         marginBottom: '3rem',
                     }}>
@@ -115,7 +116,7 @@ export default function StaticPageLayout({ title, children }) {
                                 marginBottom: '1rem'
                             }}>
                                 <Image
-                                    src={LOGO_SRC}
+                                    src="/NiceAnime-header.png"
                                     alt="NiceAnime Logo"
                                     width={120}
                                     height={36}
@@ -205,6 +206,31 @@ export default function StaticPageLayout({ title, children }) {
                                 <li><a href="/support/contact" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Liên hệ</a></li>
                             </ul>
                         </div>
+
+                        {/* ** [THÊM MỚI] Cột Hợp Tác ** */}
+                        <div>
+                            <h3 style={{
+                                color: 'white',
+                                fontSize: '1.1rem',
+                                fontWeight: '700',
+                                marginBottom: '1rem'
+                            }}>
+                                Nguồn
+                            </h3>
+                            <ul style={{
+                                listStyle: 'none',
+                                padding: 0,
+                                margin: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem'
+                            }}>
+                                <li><a href="https://phim.nguonc.com/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>https://phim.nguonc.com/</a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}></a></li>
+                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}></a></li>
+                            </ul>
+                        </div>
+                        {/* ** [KẾT THÚC THÊM MỚI] ** */}
                     </div>
 
                     <div style={{

@@ -1,124 +1,71 @@
 import { NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebaseAdmin';
 
-// const ALLOWED_ADMIN_EMAILS = (process.env.ADMIN_ALLOWED_EMAILS || '')
-const ALLOWED_ADMIN_EMAILS = (process.env.ADMIN_ALLOWED_EMAILS || process.env.ADMIN_EMAILS || '')
-
+// Lấy danh sách admin từ biến môi trường Server
+const ALLOWED_ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
 
 const COOKIE_NAME = 'adminSession';
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 24; // 24h
-
-
-
-// export async function POST(request: Request) {
-//     try {
-//         const { idToken } = await request.json();
-
-//         if (!idToken) {
-//             return NextResponse.json({ error: 'Thiếu idToken' }, { status: 400 });
-//         }
-
-//         const decodedIdToken = await adminAuth.verifyIdToken(idToken);
-
-//         if (
-//             ALLOWED_ADMIN_EMAILS.length > 0 &&
-//             (!decodedIdToken.email ||
-//                 !ALLOWED_ADMIN_EMAILS.includes(decodedIdToken.email.toLowerCase()))
-//         ) {
-//             return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
-//         }
-
-//         const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-//             expiresIn: SESSION_DURATION_MS,
-//         });
-
-//         const response = NextResponse.json({ success: true });
-//         response.cookies.set({
-//             name: COOKIE_NAME,
-//             value: sessionCookie,
-//             httpOnly: true,
-//             secure: process.env.NODE_ENV !== 'development',
-//             sameSite: 'strict',
-//             maxAge: SESSION_DURATION_MS / 1000,
-//             path: '/',
-//         });
-
-//         return response;
-//     } catch (error) {
-//         console.error('POST /api/auth/session error', error);
-//         return NextResponse.json({ error: 'Xác thực thất bại' }, { status: 401 });
-//     }
-// }
+const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 5; // 5 ngày (để admin đỡ phải login lại nhiều lần)
 
 export async function POST(request: Request) {
     try {
-        console.log('🔧 Environment check:');
-        console.log('- FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID);
-        console.log('- FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL);
-        console.log('- FIREBASE_PRIVATE_KEY exists:', !!process.env.FIREBASE_PRIVATE_KEY);
-        console.log('- ALLOWED_ADMIN_EMAILS:', ALLOWED_ADMIN_EMAILS);
-
-        const { idToken } = await request.json();
+        const body = await request.json();
+        const { idToken } = body;
 
         if (!idToken) {
-            return NextResponse.json({ error: 'Thiếu idToken' }, { status: 400 });
+            return NextResponse.json({ error: 'Thiếu thông tin xác thực' }, { status: 400 });
         }
 
-        console.log('🔍 Verifying token...');
+        // 1. Xác minh ID Token gửi từ client
         const decodedIdToken = await adminAuth.verifyIdToken(idToken);
-        console.log('✅ Token verified for email:', decodedIdToken.email);
+        const userEmail = decodedIdToken.email?.toLowerCase();
 
-        if (
-            ALLOWED_ADMIN_EMAILS.length > 0 &&
-            (!decodedIdToken.email ||
-                !ALLOWED_ADMIN_EMAILS.includes(decodedIdToken.email.toLowerCase()))
-        ) {
-            console.log('❌ Email not in allowed list');
-            return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 });
+        // 2. Kiểm tra xem email này có trong danh sách Admin cho phép không
+        // Đây là bước quan trọng nhất để chặn người lạ
+        if (!userEmail || !ALLOWED_ADMIN_EMAILS.includes(userEmail)) {
+            console.warn(`[Security] Unauthorized access attempt by: ${userEmail}`);
+            return NextResponse.json({ error: 'Tài khoản không có quyền truy cập Admin' }, { status: 403 });
         }
 
-        console.log('✅ Creating session cookie...');
+        // 3. Tạo Session Cookie
+        // Cookie này đại diện cho phiên làm việc của Admin, an toàn hơn dùng token trực tiếp
         const sessionCookie = await adminAuth.createSessionCookie(idToken, {
             expiresIn: SESSION_DURATION_MS,
         });
 
-        console.log('✅ Login successful!');
+        // 4. Trả về Response kèm Cookie
         const response = NextResponse.json({ success: true });
+
         response.cookies.set({
             name: COOKIE_NAME,
             value: sessionCookie,
-            httpOnly: true,
-            secure: process.env.NODE_ENV !== 'development',
-            sameSite: 'strict',
+            httpOnly: true, // Javascript client không thể đọc (chống XSS)
+            // secure: process.env.NODE_ENV !== 'production',
+            secure: process.env.NODE_ENV !== 'development', // Bắt buộc HTTPS ở production
+            // sameSite: 'lax',
+            sameSite: 'strict',// Giúp giữ cookie khi chuyển trang mượt mà hơn
             maxAge: SESSION_DURATION_MS / 1000,
             path: '/',
         });
 
         return response;
     } catch (error) {
-        console.error('❌ POST /api/auth/session error:', error);
-        return NextResponse.json({
-            error: 'Xác thực thất bại',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        }, { status: 401 });
+        console.error('[Login Error]', error);
+        return NextResponse.json({ error: 'Xác thực thất bại, vui lòng thử lại' }, { status: 401 });
     }
 }
 
-
+// API Logout
 export async function DELETE() {
     const response = NextResponse.json({ success: true });
     response.cookies.set({
         name: COOKIE_NAME,
         value: '',
-        httpOnly: true,
-        secure: process.env.NODE_ENV !== 'development',
-        sameSite: 'strict',
         maxAge: 0,
         path: '/',
     });
     return response;
 }
-

@@ -22,7 +22,12 @@ const CATEGORIES = [
     "Gay Cấn",
     "Bí Ẩn",
     "Lãng Mạn",
-    "Tài Liệu"
+    "Tài Liệu",
+    "Hình Sự",
+    "Gia Đình",
+    "Chính Kịch",
+    "Lịch Sử",
+    "Chiến Tranh"
 ];
 // ** [END] THÊM MỚI **
 
