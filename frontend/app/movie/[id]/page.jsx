@@ -2565,167 +2565,75 @@
 
 
 
+// FILE: app/movie/[id]/page.jsx
 'use client';
 import Image from 'next/image';
-import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
+// Lazy load suggested movies - chỉ load khi cần
+const SuggestedMoviesSection = dynamic(() => import('./SuggestedMoviesSection'), {
+    loading: () => <div style={{ minHeight: '400px' }} />,
+    ssr: false
+});
 
 // Memoized Episode Button
-const EpisodeButton = memo(({ episode, isCurrent, movieSlug, movieId, onClick, isChanging }) => (
-    <Link
-        href={`/movie/${movieSlug || movieId}?ep=${episode.episodeNumber}`}
-        onClick={(e) => {
-            e.preventDefault();
-            onClick(episode);
-        }}
-        prefetch={false}
-        style={{
-            backgroundColor: isCurrent ? '#3b82f6' : '#334155',
-            color: 'white',
-            padding: '0.75rem',
-            borderRadius: '0.5rem',
-            textAlign: 'center',
-            textDecoration: 'none',
-            fontWeight: isCurrent ? 'bold' : '600',
-            fontSize: '0.875rem',
-            transition: 'background-color 0.2s, transform 0.2s',
-            border: isCurrent ? '2px solid #60a5fa' : '2px solid transparent',
-            cursor: isChanging ? 'wait' : 'pointer',
-            opacity: isChanging ? 0.6 : 1,
-            display: 'block',
-        }}
-        onMouseEnter={(e) => {
-            if (!isCurrent && !isChanging) {
-                e.currentTarget.style.backgroundColor = '#475569';
-                e.currentTarget.style.transform = 'scale(1.05)';
-            }
-        }}
-        onMouseLeave={(e) => {
-            if (!isCurrent) {
-                e.currentTarget.style.backgroundColor = '#334155';
-                e.currentTarget.style.transform = 'scale(1)';
-            }
-        }}
-    >
-        {episode.episodeNumber}
-    </Link>
-));
-EpisodeButton.displayName = 'EpisodeButton';
-
-// Memoized Movie Card
-const MovieCard = memo(({ movie }) => {
-    const totalEpisodes = movie.totalEpisodes || 1;
-    const currentEpisodeCount = movie.episodes?.length || 1;
-    const isMovieSeries = totalEpisodes > 1 || movie.totalEpisodes === '??';
-
-    let episodeStatusText, episodeStatusColor;
-    if (isMovieSeries) {
-        if (movie.totalEpisodes === '??' || currentEpisodeCount < totalEpisodes) {
-            episodeStatusText = `${currentEpisodeCount}/${totalEpisodes}`;
-            episodeStatusColor = '#f59e0b';
-        } else {
-            episodeStatusText = `${totalEpisodes}/${totalEpisodes}`;
-            episodeStatusColor = '#10b981';
-        }
-    } else {
-        episodeStatusText = '1/1';
-        episodeStatusColor = '#ef4444';
-    }
-
-    const typeStatusText = isMovieSeries ? 'Phim Bộ' : 'Phim Lẻ';
-    const typeStatusColor = isMovieSeries ? '#3b82f6' : '#ef4444';
+const EpisodeButton = memo(({ episode, isCurrent, movieSlug, movieId, onClick, isChanging }) => {
+    const handleClick = useCallback((e) => {
+        e.preventDefault();
+        if (!isChanging) onClick(episode);
+    }, [episode, onClick, isChanging]);
 
     return (
-        <Link href={`/movie/${movie.slug || movie.id}`} prefetch={false} style={{ textDecoration: 'none', color: 'white' }}>
-            <div style={{
-                position: 'relative',
-                overflow: 'hidden',
-                borderRadius: '1rem',
-                boxShadow: '0 15px 25px rgba(0,0,0,0.45)',
-                cursor: 'pointer',
-                transition: 'transform 0.3s',
-                backgroundColor: '#0f172a',
-                minHeight: '360px'
+        <Link
+            href={`/movie/${movieSlug || movieId}?ep=${episode.episodeNumber}`}
+            onClick={handleClick}
+            prefetch={false}
+            style={{
+                backgroundColor: isCurrent ? '#3b82f6' : '#334155',
+                color: 'white',
+                padding: '0.75rem',
+                borderRadius: '0.5rem',
+                textAlign: 'center',
+                textDecoration: 'none',
+                fontWeight: isCurrent ? 'bold' : '600',
+                fontSize: '0.875rem',
+                transition: 'background-color 0.15s ease, transform 0.15s ease',
+                border: isCurrent ? '2px solid #60a5fa' : '2px solid transparent',
+                cursor: isChanging ? 'wait' : 'pointer',
+                opacity: isChanging ? 0.6 : 1,
+                display: 'block',
+                pointerEvents: isChanging ? 'none' : 'auto'
             }}
             onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-8px)';
-                e.currentTarget.style.boxShadow = '0 25px 35px rgba(59, 130, 246, 0.35)';
+                if (!isCurrent && !isChanging) {
+                    e.currentTarget.style.backgroundColor = '#475569';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                }
             }}
             onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 15px 25px rgba(0,0,0,0.45)';
-            }}>
-                <div style={{ position: 'relative', width: '100%', height: '320px' }}>
-                    <Image
-                        src={movie.thumbnail}
-                        alt={movie.title}
-                        fill
-                        sizes="(max-width: 768px) 100vw, 240px"
-                        style={{ objectFit: 'cover' }}
-                        loading="lazy"
-                        quality={75}
-                    />
-                </div>
-                <div style={{
-                    position: 'absolute',
-                    top: '0.75rem',
-                    left: '0.75rem',
-                    backgroundColor: episodeStatusColor,
-                    color: 'white',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '999px',
-                    fontSize: '0.85rem',
-                    fontWeight: 'bold',
-                    zIndex: 5
-                }}>{episodeStatusText}</div>
-                <div style={{
-                    position: 'absolute',
-                    top: '0.75rem',
-                    right: '0.75rem',
-                    backgroundColor: typeStatusColor,
-                    color: 'white',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '999px',
-                    fontSize: '0.85rem',
-                    fontWeight: 'bold',
-                    zIndex: 5
-                }}>{typeStatusText}</div>
-                <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.85) 100%)'
-                }} />
-                <div style={{
-                    position: 'absolute',
-                    bottom: '0.75rem',
-                    left: '0.75rem',
-                    right: '0.75rem'
-                }}>
-                    <h3 style={{
-                        fontWeight: '700',
-                        fontSize: '1.1rem',
-                        margin: '0 0 0.35rem 0',
-                        lineHeight: 1.4
-                    }}>{movie.title}</h3>
-                    <div style={{
-                        display: 'flex',
-                        gap: '0.5rem',
-                        fontSize: '0.85rem',
-                        color: '#cbd5e1'
-                    }}>
-                        <span>📅 {movie.year}</span>
-                        <span>•</span>
-                        <span>🎭 {movie.category}</span>
-                    </div>
-                </div>
-            </div>
+                if (!isCurrent) {
+                    e.currentTarget.style.backgroundColor = '#334155';
+                    e.currentTarget.style.transform = 'scale(1)';
+                }
+            }}
+            aria-label={`Xem tập ${episode.episodeNumber}`}
+        >
+            {episode.episodeNumber}
         </Link>
     );
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.episode.id === nextProps.episode.id &&
+        prevProps.isCurrent === nextProps.isCurrent &&
+        prevProps.isChanging === nextProps.isChanging
+    );
 });
-MovieCard.displayName = 'MovieCard';
+EpisodeButton.displayName = 'EpisodeButton';
 
 export default function MovieDetail() {
     const params = useParams();
@@ -2736,13 +2644,14 @@ export default function MovieDetail() {
     const [currentEpisode, setCurrentEpisode] = useState(null);
     const [loading, setLoading] = useState(true);
     const [loadingEpisodes, setLoadingEpisodes] = useState(true);
-    const [suggestedMovies, setSuggestedMovies] = useState([]);
     const [isChangingEpisode, setIsChangingEpisode] = useState(false);
     const [iframeLoaded, setIframeLoaded] = useState(false);
+    const [showSuggested, setShowSuggested] = useState(false);
 
-    // Load movie và episodes song song
+    // Load data với optimization
     useEffect(() => {
         let isMounted = true;
+        const abortController = new AbortController();
 
         const loadData = async () => {
             try {
@@ -2756,8 +2665,7 @@ export default function MovieDetail() {
 
                 let movieData = null;
                 if (!snapshot.empty) {
-                    const movieDoc = snapshot.docs[0];
-                    movieData = { id: movieDoc.id, ...movieDoc.data() };
+                    movieData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 } else {
                     const docRef = doc(db, 'movies', params.id);
                     const docSnap = await getDoc(docRef);
@@ -2766,77 +2674,39 @@ export default function MovieDetail() {
                     }
                 }
 
-                if (!isMounted) return;
+                if (!isMounted || abortController.signal.aborted) return;
 
                 if (movieData) {
                     setMovie(movieData);
+                    setLoading(false);
 
-                    // Load episodes và suggested movies song song
-                    const [episodesSnapshot, suggestedSnapshot] = await Promise.all([
-                        getDocs(query(
-                            collection(db, 'episodes'),
-                            where('movieId', '==', movieData.id),
-                            orderBy('episodeNumber', 'asc')
-                        )),
-                        (async () => {
-                            const categories = Array.isArray(movieData.category)
-                                ? movieData.category
-                                : (typeof movieData.category === 'string'
-                                    ? movieData.category.split(',').map(c => c.trim()).filter(c => c)
-                                    : []);
-                            
-                            const categoryFilter = categories.length > 0 ? categories[0] : 'Anime';
-                            
-                            return getDocs(query(
-                                collection(db, 'movies'),
-                                where('category', 'array-contains', categoryFilter),
-                                orderBy('createdAt', 'desc'),
-                                limit(11)
-                            ));
-                        })()
-                    ]);
+                    // Load episodes
+                    const episodesSnapshot = await getDocs(query(
+                        collection(db, 'episodes'),
+                        where('movieId', '==', movieData.id),
+                        orderBy('episodeNumber', 'asc')
+                    ));
 
-                    if (!isMounted) return;
+                    if (!isMounted || abortController.signal.aborted) return;
 
-                    // Process episodes
                     const episodesList = episodesSnapshot.docs.map(doc => ({
                         id: doc.id,
                         episodeNumber: doc.data().episodeNumber,
                         title: doc.data().title,
                         videoUrl: doc.data().videoUrl
                     }));
+
                     setEpisodes(episodesList);
                     setLoadingEpisodes(false);
 
-                    // Set current episode
                     const ep = parseInt(searchParams.get('ep')) || 1;
                     const episode = episodesList.find(e => e.episodeNumber === ep);
                     setCurrentEpisode(episode || episodesList[0]);
-
-                    // Process suggested movies
-                    const moviesList = suggestedSnapshot.docs
-                        .map(doc => {
-                            const data = doc.data();
-                            return {
-                                id: doc.id,
-                                title: data.title,
-                                thumbnail: data.thumbnail,
-                                slug: data.slug,
-                                year: data.year,
-                                totalEpisodes: data.totalEpisodes,
-                                category: Array.isArray(data.category)
-                                    ? data.category.join(', ')
-                                    : data.category,
-                                episodes: data.episodes || [],
-                            };
-                        })
-                        .filter(m => m.id !== movieData.id)
-                        .slice(0, 10);
-                    setSuggestedMovies(moviesList);
+                } else {
+                    setLoading(false);
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
-            } finally {
                 if (isMounted) setLoading(false);
             }
         };
@@ -2845,39 +2715,51 @@ export default function MovieDetail() {
 
         return () => {
             isMounted = false;
+            abortController.abort();
         };
     }, [params.id, searchParams]);
 
-    // Update meta tags
+    // Lazy load suggested movies với Intersection Observer
     useEffect(() => {
         if (!movie) return;
 
-        const pageTitle = `${movie.title} - Xem phim ${movie.title} Vietsub HD | NiceAnime`;
-        document.title = pageTitle;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && !showSuggested) {
+                    setShowSuggested(true);
+                }
+            },
+            { rootMargin: '300px' }
+        );
 
-        const updateMeta = (selector, content) => {
-            let meta = document.querySelector(selector);
+        const target = document.getElementById('suggested-trigger');
+        if (target) observer.observe(target);
+
+        return () => observer.disconnect();
+    }, [movie, showSuggested]);
+
+    // Update meta tags - chỉ những gì cần thiết
+    useEffect(() => {
+        if (!movie) return;
+
+        document.title = `${movie.title} - Xem phim ${movie.title} Vietsub HD | NiceAnime`;
+
+        // Batch update meta tags
+        const metas = [
+            ['name', 'description', movie.description 
+                ? `Xem phim ${movie.title} (${movie.year}) Vietsub HD. ${movie.description.substring(0, 150)}...`
+                : `Xem phim ${movie.title} (${movie.year}) Vietsub HD trên NiceAnime`],
+            ['property', 'og:title', movie.title],
+            ['property', 'og:image', movie.thumbnail],
+            ['property', 'og:type', 'video.movie']
+        ];
+
+        metas.forEach(([attr, value, content]) => {
+            let meta = document.querySelector(`meta[${attr}="${value}"]`);
             if (meta) {
                 meta.setAttribute('content', content);
-            } else {
-                meta = document.createElement('meta');
-                const match = selector.match(/\[(.*?)="(.*?)"\]/);
-                if (match) {
-                    meta.setAttribute(match[1], match[2]);
-                    meta.setAttribute('content', content);
-                    document.head.appendChild(meta);
-                }
             }
-        };
-
-        const description = movie.description
-            ? `Xem phim ${movie.title} (${movie.year}) Vietsub HD miễn phí. ${movie.description.substring(0, 150)}...`
-            : `Xem phim ${movie.title} (${movie.year}) Vietsub HD miễn phí trên NiceAnime`;
-
-        updateMeta('meta[name="description"]', description);
-        updateMeta('meta[property="og:title"]', movie.title);
-        updateMeta('meta[property="og:description"]', description);
-        updateMeta('meta[property="og:image"]', movie.thumbnail);
+        });
     }, [movie]);
 
     // Handle episode change
@@ -2891,23 +2773,17 @@ export default function MovieDetail() {
         router.push(`?ep=${episode.episodeNumber}`, { scroll: false });
         window.scrollTo({ top: 0, behavior: 'smooth' });
         
-        setTimeout(() => setIsChangingEpisode(false), 500);
+        setTimeout(() => setIsChangingEpisode(false), 300);
     }, [isChangingEpisode, currentEpisode?.id, router]);
 
-    // Memoized values
-    const movieCategoryDisplay = useMemo(() =>
-        Array.isArray(movie?.category)
-            ? movie.category.join(', ')
-            : movie?.category || '',
-        [movie?.category]
-    );
+    // Category display
+    const movieCategoryDisplay = movie?.category
+        ? (Array.isArray(movie.category) ? movie.category.join(', ') : movie.category)
+        : '';
 
-    const categoryArray = useMemo(() => {
-        if (!movie?.category) return [];
-        return Array.isArray(movie.category)
-            ? movie.category
-            : movie.category.split(',').map(c => c.trim()).filter(c => c);
-    }, [movie?.category]);
+    const categoryArray = movie?.category
+        ? (Array.isArray(movie.category) ? movie.category : movie.category.split(',').map(c => c.trim()).filter(c => c))
+        : [];
 
     if (loading) {
         return (
@@ -2929,12 +2805,6 @@ export default function MovieDetail() {
                     animation: 'spin 1s linear infinite'
                 }}></div>
                 <p style={{ marginTop: '1rem' }}>Đang tải phim...</p>
-                <style jsx>{`
-                    @keyframes spin {
-                        0% { transform: rotate(0deg); }
-                        100% { transform: rotate(360deg); }
-                    }
-                `}</style>
             </div>
         );
     }
@@ -2965,7 +2835,7 @@ export default function MovieDetail() {
     }
 
     return (
-        <div style={{ minHeight: '100vh', backgroundColor: '#05060b', color: 'white', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div style={{ minHeight: '100vh', backgroundColor: '#05060b', color: 'white', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
             <header style={{
                 position: 'fixed',
                 top: 0,
@@ -2975,7 +2845,8 @@ export default function MovieDetail() {
                 background: 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 backdropFilter: 'blur(10px)',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
+                boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+                willChange: 'transform'
             }}>
                 <div style={{
                     maxWidth: '1300px',
@@ -2993,7 +2864,7 @@ export default function MovieDetail() {
                             width={240}
                             height={72}
                             priority
-                            quality={85}
+                            quality={90}
                             style={{ height: '72px', width: 'auto', objectFit: 'contain' }}
                         />
                     </Link>
@@ -3056,8 +2927,6 @@ export default function MovieDetail() {
                                     }}
                                     allowFullScreen
                                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
-                                    referrerPolicy="no-referrer-when-downgrade"
                                     loading="eager"
                                     title={`${movie.title} - Tập ${currentEpisode.episodeNumber}`}
                                     onLoad={() => setIframeLoaded(true)}
@@ -3136,7 +3005,7 @@ export default function MovieDetail() {
                     <div style={{ position: 'relative', width: '100%', aspectRatio: '2 / 3' }}>
                         <Image
                             src={movie.thumbnail}
-                            alt={`${movie.title} - Poster`}
+                            alt={`${movie.title} poster`}
                             fill
                             sizes="(max-width: 768px) 100vw, 300px"
                             style={{
@@ -3145,7 +3014,7 @@ export default function MovieDetail() {
                                 boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)'
                             }}
                             priority
-                            quality={85}
+                            quality={90}
                         />
                     </div>
 
@@ -3209,27 +3078,16 @@ export default function MovieDetail() {
                     </div>
                 </div>
 
-                {/* Suggested Movies */}
-                {suggestedMovies.length > 0 && (
-                    <div style={{ marginBottom: '3rem' }}>
-                        <h2 style={{
-                            fontSize: '1.75rem',
-                            fontWeight: '700',
-                            margin: '0 0 1.5rem 0'
-                        }}>
-                            🎬 Phim cùng thể loại: {movieCategoryDisplay}
-                        </h2>
+                {/* Trigger cho lazy loading */}
+                <div id="suggested-trigger" style={{ height: '1px' }}></div>
 
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                            gap: '1.5rem'
-                        }}>
-                            {suggestedMovies.map(movie => (
-                                <MovieCard key={movie.id} movie={movie} />
-                            ))}
-                        </div>
-                    </div>
+                {/* Lazy loaded Suggested Movies */}
+                {showSuggested && (
+                    <SuggestedMoviesSection 
+                        movieId={movie.id}
+                        movieCategory={movie.category}
+                        movieCategoryDisplay={movieCategoryDisplay}
+                    />
                 )}
             </main>
 

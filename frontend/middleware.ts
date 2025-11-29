@@ -15,7 +15,7 @@ export function middleware(request: NextRequest) {
   const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
   if (!hasAdminCookie && !isPublicPath) {
-    const loginUrl = new URL('/admin/login', request.url);
+    const loginUrl = new URL('/', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
   }
