@@ -3197,15 +3197,167 @@ export default function MovieDetail() {
             </main>
 
             <footer style={{
-                backgroundColor: '#0a0d16',
-                borderTop: '1px solid #1e293b',
-                padding: '2rem 1.5rem',
-                textAlign: 'center'
-            }}>
-                <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>
-                    Copyright © {new Date().getFullYear()} by NiceAnime
-                </p>
-            </footer>
+                            backgroundColor: '#0a0d16',
+                            borderTop: '1px solid #1e293b',
+                            padding: '3rem 1.5rem 2rem',
+                        }}>
+                            <div style={{
+                                maxWidth: '1300px',
+                                margin: '0 auto',
+                            }}>
+                                <div style={{
+                                    display: 'grid',
+                                    // Thay đổi cấu trúc lưới để chứa 5 cột (hoặc 4 cột nếu cần)
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                                    gap: '3rem',
+                                    marginBottom: '3rem',
+                                }}>
+                                    <div>
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            marginBottom: '1rem'
+                                        }}>
+                                            <Image
+                                                src="/NiceAnime-header.png"
+                                                alt="NiceAnime Logo"
+                                                width={120}
+                                                height={36}
+                                                style={{ height: '36px', width: 'auto' }}
+                                            />
+                                        </div>
+                                        <p style={{
+                                            color: '#94a3b8',
+                                            fontSize: '0.9rem',
+                                            lineHeight: '1.6',
+                                            marginBottom: '1rem'
+                                        }}>
+                                            NiceAnime là nền tảng xem phim anime miễn phí hàng đầu, nơi bạn có thể khám phá hàng ngàn bộ phim với phụ đề Vietsub chất lượng cao được cập nhật liên tục mỗi ngày.
+                                        </p>
+                                    </div>
+            
+                                    <div>
+                                        <h3 style={{
+                                            color: 'white',
+                                            fontSize: '1.1rem',
+                                            fontWeight: '700',
+                                            marginBottom: '1rem'
+                                        }}>
+                                            Danh Mục
+                                        </h3>
+                                        <ul style={{
+                                            listStyle: 'none',
+                                            padding: 0,
+                                            margin: 0,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.75rem'
+                                        }}>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Mới (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Hay (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Vietsub (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Phim Kinh Dị (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime HD (Đang Cập Nhật)</a></li>
+                                        </ul>
+                                    </div>
+            
+                                    <div>
+                                        <h3 style={{
+                                            color: 'white',
+                                            fontSize: '1.1rem',
+                                            fontWeight: '700',
+                                            marginBottom: '1rem'
+                                        }}>
+                                            Thể Loại
+                                        </h3>
+                                        <ul style={{
+                                            listStyle: 'none',
+                                            padding: 0,
+                                            margin: 0,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.75rem'
+                                        }}>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hành Động (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Phiêu Lưu (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hài Hước (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Lãng Mạn (Đang Cập Nhật)</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Học Đường (Đang Cập Nhật)</a></li>
+                                        </ul>
+                                    </div>
+            
+                                    <div>
+                                        <h3 style={{
+                                            color: 'white',
+                                            fontSize: '1.1rem',
+                                            fontWeight: '700',
+                                            marginBottom: '1rem'
+                                        }}>
+                                            Hỗ Trợ
+                                        </h3>
+                                        <ul style={{
+                                            listStyle: 'none',
+                                            padding: 0,
+                                            margin: 0,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.75rem'
+                                        }}>
+                                            <li><a href="/support/privacy" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Chính sách bảo mật</a></li>
+                                            <li><a href="/support/terms" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Điều khoản sử dụng</a></li>
+                                            <li><a href="/support/about" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Giới thiệu</a></li>
+                                            <li><a href="/support/contact" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Liên hệ</a></li>
+                                        </ul>
+                                    </div>
+            
+                                    {/* ** [THÊM MỚI] Cột Hợp Tác ** */}
+                                    <div>
+                                        <h3 style={{
+                                            color: 'white',
+                                            fontSize: '1.1rem',
+                                            fontWeight: '700',
+                                            marginBottom: '1rem'
+                                        }}>
+                                            Nguồn
+                                        </h3>
+                                        <ul style={{
+                                            listStyle: 'none',
+                                            padding: 0,
+                                            margin: 0,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.75rem'
+                                        }}>
+                                            <li><a href="https://phim.nguonc.com/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>https://phim.nguonc.com/</a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}></a></li>
+                                            <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}></a></li>
+                                        </ul>
+                                    </div>
+                                    {/* ** [KẾT THÚC THÊM MỚI] ** */}
+                                </div>
+            
+                                <div style={{
+                                    paddingTop: '2rem',
+                                    borderTop: '1px solid #1e293b',
+                                    textAlign: 'center'
+                                }}>
+                                    <p style={{
+                                        color: '#64748b',
+                                        fontSize: '0.9rem',
+                                        marginBottom: '0.5rem'
+                                    }}>
+                                        Copyright © {new Date().getFullYear()} by NiceAnime - All rights reserved.
+                                    </p>
+                                    <p style={{
+                                        color: '#475569',
+                                        fontSize: '0.85rem'
+                                    }}>
+                                        Website made by Nguyen Quang Anh
+                                    </p>
+                                </div>
+                            </div>
+                        </footer>
 
             <style jsx>{`
                 @keyframes spin {

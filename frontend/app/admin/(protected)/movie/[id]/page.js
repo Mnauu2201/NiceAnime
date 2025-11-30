@@ -1,33 +1,23 @@
+// FILE: app/admin/(protected)/movie/[id]/page.js
 'use client';
 
 import { use, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, addDoc, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where, orderBy, writeBatch } from 'firebase/firestore'; // Thêm writeBatch
 import { slugify } from '@/lib/utils';
+import Image from 'next/image';
+import Link from 'next/link';
+import SuggestedMoviesSection from '@/app/movie/[id]/SuggestedMoviesSection';
+import dynamic from 'next/dynamic'; // <-- DÒNG NÀY RẤT QUAN TRỌNG
 
 // ** [START] THÊM MỚI (1/7): Định nghĩa danh sách Thể loại **
 const CATEGORIES = [
-    "Anime",
-    "Hành Động",
-    "Phiêu Lưu",
-    "Hài",
-    "Hoạt Hình",
-    "Giả Tưởng",
-    "Kinh Dị",
-    "Khoa Học Viễn Tưởng",
-    "Tâm Lý",
-    "Tình Cảm",
-    "Gay Cấn",
-    "Bí Ẩn",
-    "Lãng Mạn",
-    "Tài Liệu",
-    "Hình Sự",
-    "Gia Đình",
-    "Chính Kịch",
-    "Lịch Sử",
-    "Chiến Tranh"
+    "Anime", "Hành Động", "Phiêu Lưu", "Hài", "Hoạt Hình", "Giả Tưởng",
+    "Kinh Dị", "Khoa Học Viễn Tưởng", "Tâm Lý", "Tình Cảm", "Gay Gấn",
+    "Bí Ẩn", "Lãng Mạn", "Tài Liệu", "Hình Sự", "Gia Đình",
+    "Chính Kịch", "Lịch Sử", "Chiến Tranh"
 ];
 // ** [END] THÊM MỚI **
 
@@ -35,812 +25,421 @@ const formatDateTimeInput = (value) => {
     if (!value) return '';
     const date = value.seconds ? new Date(value.seconds * 1000) : new Date(value);
     if (Number.isNaN(date.getTime())) return '';
-    const offset = date.getTimezoneOffset();
-    return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 };
 
-const parseDateTimeInput = (value) => {
-    if (!value) return new Date();
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-};
 
-export default function MovieDetailPage({ params }) {
-    const { id: movieId } = use(params);
+// -------------------------------------------------------------
+// BƯỚC KHẮC PHỤC LỖI MOBILE (DYNAMIC IMPORT)
+// SỬ DỤNG ĐƯỜNG DẪN TƯƠNG ĐỐI ĐỂ TRÁNH LỖI ALIAS
+// -------------------------------------------------------------
+const Player = dynamic(() => import('../../../../../components/EmbedPlayer'), {
+    // Đường dẫn này giả định component/ nằm ở thư mục gốc của dự án.
+    ssr: false, // <-- CHÌA KHÓA: Ngăn Server Render component này, giải quyết lỗi Mobile
+    loading: () => (
+        <div style={{
+            minHeight: '350px',
+            backgroundColor: '#0f172a',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: '#cbd5e1',
+            fontSize: '1.25rem'
+        }}>
+            Đang tải trình phát video...
+        </div>
+    ),
+});
+// -------------------------------------------------------------
+
+
+export default function MovieDetail() {
+    const params = useParams();
     const router = useRouter();
-
-    const [loading, setLoading] = useState(true);
+    const searchParams = useSearchParams();
+    const [user, setUser] = useState(null);
     const [movie, setMovie] = useState(null);
-    // ** [START] THÊM MỚI (2/7): State điều khiển Dropdown Category & Ref **
-    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
-    const dropdownRef = useRef(null);
-    // ** [END] THÊM MỚI **
-
-    const [formData, setFormData] = useState({
-        title: '',
-        thumbnail: '',
-        // ** THAY ĐỔI: category là mảng (Array) **
-        category: [],
-        year: new Date().getFullYear(),
-        description: '',
-        // ** [START] THAY ĐỔI: Thêm trường format (Phim lẻ/Phim bộ) **
-        format: 'Phim lẻ', // Mặc định là Phim lẻ
-        // ** [END] THAY ĐỔI **
-        totalEpisodes: 1,
-        createdAt: ''
-    });
     const [episodes, setEpisodes] = useState([]);
-    const [episodesLoading, setEpisodesLoading] = useState(false);
+    const [currentEpisode, setCurrentEpisode] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [movieCategoryDisplay, setMovieCategoryDisplay] = useState('');
+    const [showSuggested, setShowSuggested] = useState(false);
+    const movieRef = useRef(null);
+
+    // State cho Form
     const [newEpisode, setNewEpisode] = useState({
-        episodeNumber: '',
-        title: '',
+        episodeNumber: 1,
         videoUrl: '',
-        createdAt: ''
+        createdAt: formatDateTimeInput(new Date())
     });
-    const [savingMovie, setSavingMovie] = useState(false);
-    const [notification, setNotification] = useState({ message: '', type: 'success', visible: false });
-    const notificationTimer = useRef(null);
-    const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null, loading: false });
 
-    // ** [START] THÊM MỚI (3/7): Xử lý đóng Dropdown khi click ra ngoài **
+    // Authentication Check
     useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsCategoryDropdownOpen(false);
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [dropdownRef]);
-    // ** [END] THÊM MỚI **
-
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            if (!currentUser) {
-                router.push('/admin/login');
-                return;
-            }
-            await loadMovie();
-        });
-
-        return () => {
-            unsubscribe();
-            if (notificationTimer.current) {
-                clearTimeout(notificationTimer.current);
-            }
-        };
-    }, [router, movieId]);
-
-    const loadMovie = async () => {
-        setLoading(true);
-        try {
-            const movieDoc = await getDoc(doc(db, 'movies', movieId));
-            if (!movieDoc.exists()) {
-                showNotification('Không tìm thấy phim!', 'error');
-                router.push('/admin/dashboard');
-                return;
-            }
-            const movieData = movieDoc.data();
-            setMovie({ id: movieDoc.id, ...movieData });
-
-            // Tự động tạo slug nếu phim cũ chưa có slug
-            if (!movieData.slug && movieData.title) {
-                const slug = slugify(movieData.title);
-                await updateDoc(doc(db, 'movies', movieId), { slug });
-            }
-
-            // ** THAY ĐỔI: Chuyển category từ string (dữ liệu cũ) sang mảng (dữ liệu mới) **
-            let categoryArray = [];
-            if (Array.isArray(movieData.category)) {
-                categoryArray = movieData.category;
-            } else if (typeof movieData.category === 'string' && movieData.category) {
-                // Giả định nếu là string thì có thể là string ngăn cách bằng phẩy
-                categoryArray = movieData.category.split(',').map(c => c.trim()).filter(Boolean);
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
             } else {
-                categoryArray = ['Anime']; // Giá trị mặc định nếu không có gì
-            }
-            // ** END THAY ĐỔI **
-
-            setFormData({
-                title: movieData.title || '',
-                thumbnail: movieData.thumbnail || '',
-                category: categoryArray, // Sử dụng mảng đã xử lý
-                year: movieData.year || new Date().getFullYear(),
-                description: movieData.description || '',
-                totalEpisodes: movieData.totalEpisodes || 1,
-                // ** [START] THAY ĐỔI: Load định dạng phim (format) **
-                format: movieData.format || 'Phim lẻ', // Load format, mặc định là Phim lẻ
-                // ** [END] THAY ĐỔI **
-                createdAt: formatDateTimeInput(movieData.createdAt)
-            });
-            await loadEpisodes();
-        } catch (error) {
-            console.error('Error loading movie:', error);
-            showNotification('Không thể tải phim: ' + error.message, 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const loadEpisodes = async () => {
-        setEpisodesLoading(true);
-        try {
-            const episodesQuery = query(collection(db, 'episodes'), where('movieId', '==', movieId));
-            const snapshot = await getDocs(episodesQuery);
-            const list = snapshot.docs.map((docSnapshot) => {
-                const data = docSnapshot.data();
-                return {
-                    id: docSnapshot.id,
-                    ...data,
-                    createdAtInput: formatDateTimeInput(data.createdAt)
-                };
-            }).sort((a, b) => a.episodeNumber - b.episodeNumber);
-            setEpisodes(list);
-        } catch (error) {
-            console.error('Error loading episodes:', error);
-            showNotification('Không thể tải danh sách tập: ' + error.message, 'error');
-        } finally {
-            setEpisodesLoading(false);
-        }
-    };
-
-    const showNotification = (message, type = 'success') => {
-        if (notificationTimer.current) clearTimeout(notificationTimer.current);
-        setNotification({ message, type, visible: true });
-        notificationTimer.current = setTimeout(() => {
-            setNotification((prev) => ({ ...prev, visible: false }));
-        }, 4000);
-    };
-
-    const hideNotification = () => {
-        if (notificationTimer.current) {
-            clearTimeout(notificationTimer.current);
-            notificationTimer.current = null;
-        }
-        setNotification((prev) => ({ ...prev, visible: false }));
-    };
-
-    const openConfirmModal = ({ title, message, onConfirm }) => {
-        setConfirmModal({ open: true, title, message, onConfirm, loading: false });
-    };
-
-    const closeConfirmModal = () => {
-        setConfirmModal((prev) => ({ ...prev, open: false, loading: false }));
-    };
-
-    const handleConfirmAction = async () => {
-        if (!confirmModal.onConfirm) {
-            closeConfirmModal();
-            return;
-        }
-        setConfirmModal((prev) => ({ ...prev, loading: true }));
-        try {
-            await confirmModal.onConfirm();
-        } finally {
-            closeConfirmModal();
-        }
-    };
-
-    const handleUpdateMovie = async (e) => {
-        e.preventDefault();
-        // ** THÊM: Kiểm tra chọn ít nhất 1 thể loại **
-        if (!Array.isArray(formData.category) || formData.category.length === 0) {
-            showNotification('Vui lòng chọn ít nhất một thể loại!', 'error');
-            return;
-        }
-        // ** END THÊM **
-
-        setSavingMovie(true);
-        try {
-            const slug = slugify(formData.title);
-            await updateDoc(doc(db, 'movies', movieId), {
-                title: formData.title,
-                slug: slug, // Tự động tạo slug khi cập nhật
-                thumbnail: formData.thumbnail,
-                category: formData.category, // Category đã là mảng
-                year: parseInt(formData.year) || new Date().getFullYear(),
-                description: formData.description,
-                // ** [START] THAY ĐỔI: Lưu định dạng phim (format) **
-                format: formData.format, // Lưu định dạng phim
-                // ** [END] THAY ĐỔI **
-                totalEpisodes: parseInt(formData.totalEpisodes) || 1,
-                createdAt: parseDateTimeInput(formData.createdAt)
-            });
-            showNotification('Đã cập nhật thông tin phim!', 'success');
-            await loadMovie();
-        } catch (error) {
-            console.error('Error updating movie:', error);
-            showNotification('Không thể cập nhật phim: ' + error.message, 'error');
-        } finally {
-            setSavingMovie(false);
-        }
-    };
-
-    const handleEpisodeFieldChange = (episodeId, field, value) => {
-        setEpisodes((prev) =>
-            prev.map((episode) => (episode.id === episodeId ? { ...episode, [field]: value } : episode))
-        );
-    };
-
-    const handleSaveEpisode = async (episodeId) => {
-        const episode = episodes.find((ep) => ep.id === episodeId);
-        if (!episode) return;
-        try {
-            await updateDoc(doc(db, 'episodes', episodeId), {
-                episodeNumber: parseInt(episode.episodeNumber) || 1,
-                title: episode.title,
-                videoUrl: episode.videoUrl,
-                createdAt: parseDateTimeInput(episode.createdAtInput),
-                movieId
-            });
-            showNotification(`Đã cập nhật ${episode.title || `tập ${episode.episodeNumber}`}!`, 'success');
-            await loadEpisodes();
-        } catch (error) {
-            console.error('Error updating episode:', error);
-            showNotification('Không thể cập nhật tập: ' + error.message, 'error');
-        }
-    };
-
-    const handleDeleteEpisode = async (episodeId, episodeLabel) => {
-        openConfirmModal({
-            title: `Xóa ${episodeLabel}?`,
-            message: 'Thao tác này không thể hoàn tác.',
-            onConfirm: async () => {
-                await deleteDoc(doc(db, 'episodes', episodeId));
-                showNotification('Đã xóa tập!', 'success');
-                await loadEpisodes();
+                router.push('/admin/login');
             }
         });
-    };
+        return () => unsubscribe();
+    }, [router]);
 
+    // Load Movie Data
+    useEffect(() => {
+        if (!params.id) return;
+        const loadMovie = async () => {
+            try {
+                const docRef = doc(db, 'movies', params.id);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setMovie({ id: docSnap.id, ...docSnap.data() });
+                } else {
+                    router.push('/admin');
+                }
+            } catch (error) {
+                console.error("Lỗi tải phim: ", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadMovie();
+    }, [params.id, router]);
+
+    // Load Episodes
+    useEffect(() => {
+        if (!movie) return;
+        const loadEpisodes = async () => {
+            try {
+                const episodesQuery = query(
+                    collection(db, 'episodes'),
+                    where('movieId', '==', movie.id),
+                    orderBy('episodeNumber', 'asc')
+                );
+                const querySnapshot = await getDocs(episodesQuery);
+                const episodesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setEpisodes(episodesData);
+
+                // Cập nhật tập hiện tại dựa trên URL param
+                const ep = parseInt(searchParams.get('ep')) || 1;
+                const episode = episodesData.find(e => e.episodeNumber === ep);
+                setCurrentEpisode(episode || episodesData[0]);
+
+                // Thiết lập số tập mặc định cho form
+                setNewEpisode(prev => ({ ...prev, episodeNumber: episodesData.length + 1 }));
+
+            } catch (error) {
+                console.error("Lỗi tải tập phim: ", error);
+            }
+        };
+        loadEpisodes();
+    }, [movie, searchParams]);
+
+    // Update Current Episode based on URL
+    useEffect(() => {
+        const ep = parseInt(searchParams.get('ep')) || 1;
+        if (episodes.length > 0) {
+            const episode = episodes.find(e => e.episodeNumber === ep);
+            setCurrentEpisode(episode || episodes[0]);
+        }
+    }, [episodes, searchParams]);
+
+    // Cập nhật tên thể loại hiển thị
+    useEffect(() => {
+        if (movie) {
+            const display = movie.category.map(cat => CATEGORIES.find(c => slugify(c) === cat) || cat).join(', ');
+            setMovieCategoryDisplay(display);
+        }
+    }, [movie]);
+
+    // Intersection Observer cho Suggested Movies
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting && !showSuggested) {
+                    setShowSuggested(true);
+                    observer.unobserve(entry.target);
+                }
+            },
+            { threshold: 0.1 }
+        );
+
+        if (movieRef.current) {
+            const triggerElement = document.getElementById('suggested-trigger');
+            if (triggerElement) {
+                observer.observe(triggerElement);
+            }
+        }
+        return () => {
+            const triggerElement = document.getElementById('suggested-trigger');
+            if (triggerElement) {
+                observer.unobserve(triggerElement);
+            }
+        };
+    }, [showSuggested]);
+
+    // [THÊM TẬP PHIM MỚI]
     const handleAddEpisode = async (e) => {
         e.preventDefault();
-        if (!newEpisode.videoUrl.trim()) {
-            showNotification('Vui lòng nhập link video!', 'error');
-            return;
+        if (!newEpisode.videoUrl || !newEpisode.episodeNumber) return;
+
+        setIsSaving(true);
+        try {
+            const docRef = await addDoc(collection(db, 'episodes'), {
+                ...newEpisode,
+                movieId: movie.id,
+                createdAt: new Date(newEpisode.createdAt)
+            });
+
+            const addedEpisode = {
+                id: docRef.id,
+                ...newEpisode,
+                movieId: movie.id,
+                createdAt: new Date(newEpisode.createdAt)
+            };
+            setEpisodes(prev => [...prev, addedEpisode].sort((a, b) => a.episodeNumber - b.episodeNumber));
+            setNewEpisode({ ...newEpisode, episodeNumber: newEpisode.episodeNumber + 1, videoUrl: '' });
+
+            await updateDoc(doc(db, 'movies', movie.id), {
+                totalEpisodes: newEpisode.episodeNumber
+            });
+            alert('Thêm tập phim thành công!');
+
+        } catch (error) {
+            console.error("Lỗi khi thêm tập phim: ", error);
+            alert('Lỗi khi thêm tập phim.');
+        } finally {
+            setIsSaving(false);
         }
+    };
+
+    // [XOÁ TẬP PHIM]
+    const handleDeleteEpisode = async (episodeId, episodeNumber) => {
+        if (!confirm(`Bạn có chắc chắn muốn xóa tập ${episodeNumber}?`)) return;
 
         try {
-            const parsedEpisodeNumber =
-                parseInt(newEpisode.episodeNumber) || episodes.length + 1;
+            await deleteDoc(doc(db, 'episodes', episodeId));
 
-            // Thêm document tập mới
-            await addDoc(collection(db, 'episodes'), {
-                movieId,
-                episodeNumber: parsedEpisodeNumber,
-                title: newEpisode.title || `Tập ${newEpisode.episodeNumber || episodes.length + 1}`,
-                videoUrl: newEpisode.videoUrl,
-                createdAt: parseDateTimeInput(newEpisode.createdAt),
-            });
-
-            // Tính lại tổng số tập mới
-            const currentTotal = Number(movie?.totalEpisodes || 0);
-            const newTotalEpisodes = Math.max(
-                currentTotal,
-                parsedEpisodeNumber,
-                episodes.length + 1
-            );
-
-            // Cập nhật field totalEpisodes của phim
-            await updateDoc(doc(db, 'movies', movieId), {
-                totalEpisodes: newTotalEpisodes,
-            });
-
-            // Cập nhật state local trong admin cho đúng ngay lập tức
-            setMovie((prev) =>
-                prev ? { ...prev, totalEpisodes: newTotalEpisodes } : prev
-            );
-            setFormData((prev) => ({
-                ...prev,
-                totalEpisodes: newTotalEpisodes,
-            }));
-
-            showNotification('Đã thêm tập mới!', 'success');
-            setNewEpisode({
-                episodeNumber: '',
-                title: '',
-                videoUrl: '',
-                createdAt: '',
-            });
-            await loadEpisodes();
+            setEpisodes(prev => prev.filter(e => e.id !== episodeId));
+            alert('Xóa tập phim thành công!');
         } catch (error) {
-            console.error('Error adding episode:', error);
-            showNotification('Không thể thêm tập: ' + error.message, 'error');
+            console.error("Lỗi khi xóa tập phim: ", error);
+            alert('Lỗi khi xóa tập phim.');
         }
     };
 
-    const handleNewEpisodeNumberChange = (value) => {
-        setNewEpisode((prev) => {
-            const episodeNumber = value;
+    // [XOÁ PHIM]
+    const handleDeleteMovie = async () => {
+        if (!confirm(`CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ phim ${movie.title} và các tập phim liên quan không?`)) return;
 
-            // Nếu tiêu đề đang rỗng hoặc đang ở dạng "Tập ..." thì tự động cập nhật
-            let title = prev.title;
-            if (!title || title.startsWith('Tập ')) {
-                title = episodeNumber ? `Tập ${episodeNumber}` : '';
-            }
+        try {
+            const batch = writeBatch(db);
+            episodes.forEach(ep => {
+                const epRef = doc(db, 'episodes', ep.id);
+                batch.delete(epRef);
+            });
+            await batch.commit();
 
-            return {
-                ...prev,
-                episodeNumber,
-                title,
-            };
-        });
+            await deleteDoc(doc(db, 'movies', movie.id));
+
+            alert(`Phim ${movie.title} đã được xóa thành công!`);
+            router.push('/admin');
+        } catch (error) {
+            console.error("Lỗi khi xóa phim: ", error);
+            alert('Lỗi khi xóa phim.');
+        }
     };
 
-    // ** [START] THÊM MỚI (4/7): Hàm xử lý Checkbox (Thêm/Xóa phần tử khỏi mảng) **
-    const handleCategoryChange = (value, isChecked) => {
-        setFormData((prevFormData) => {
-            // Đảm bảo prevFormData.category là mảng trước khi xử lý
-            const currentCategories = Array.isArray(prevFormData.category) ? prevFormData.category : [];
 
-            if (isChecked) {
-                // Thêm thể loại nếu được tích chọn
-                return {
-                    ...prevFormData,
-                    category: [...currentCategories, value].filter((v, i, a) => a.indexOf(v) === i), // Loại bỏ trùng lặp
-                };
-            } else {
-                // Xóa thể loại nếu bỏ tích chọn
-                return {
-                    ...prevFormData,
-                    category: currentCategories.filter((cat) => cat !== value),
-                };
-            }
-        });
-    };
-    // ** [END] THÊM MỚI **
-
-    const handleDeleteMovie = () => {
-        openConfirmModal({
-            title: `Xóa phim "${movie?.title}"?`,
-            message: 'Tất cả tập thuộc phim này sẽ bị xóa vĩnh viễn.',
-            onConfirm: async () => {
-                const episodesQuery = query(collection(db, 'episodes'), where('movieId', '==', movieId));
-                const episodesSnapshot = await getDocs(episodesQuery);
-                for (const docSnapshot of episodesSnapshot.docs) {
-                    await deleteDoc(docSnapshot.ref);
-                }
-                await deleteDoc(doc(db, 'movies', movieId));
-                showNotification('Đã xóa phim!', 'success');
-                router.push('/admin/dashboard');
-            }
-        });
-    };
-
-    if (loading || !movie) {
+    if (loading) {
         return (
-            <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <p>Đang tải dữ liệu...</p>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#0a0d16', color: 'white' }}>
+                <div className="spinner" style={{ width: '50px', height: '50px', border: '5px solid #1e293b', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
             </div>
         );
     }
 
-    // ** [START] THÊM MỚI (5/7): Hàm hiển thị category đã chọn trong ô input **
-    const getCategoryDisplay = () => {
-        const categories = Array.isArray(formData.category) ? formData.category : [];
-        if (categories.length === 0) {
-            return "Chọn thể loại...";
-        }
-        if (categories.length === 1) {
-            return categories[0];
-        }
-        return `${categories.length} thể loại đã chọn: ${categories.join(', ')}`;
-    };
-    // ** [END] THÊM MỚI **
+    if (!movie) return null;
 
     return (
-        <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: 'white', padding: '2rem', position: 'relative' }}>
-            {/* ... Notification Modal ... */}
-            {notification.visible && (
-                <div
-                    onClick={hideNotification}
-                    style={{
-                        position: 'fixed',
-                        top: '1rem',
-                        right: '1rem',
-                        backgroundColor: notification.type === 'success' ? '#16a34a' : '#dc2626',
-                        color: 'white',
-                        padding: '1rem 1.25rem',
-                        borderRadius: '0.5rem',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.35)',
-                        minWidth: '240px',
-                        cursor: 'pointer',
-                        zIndex: 100
-                    }}
-                >
-                    <strong style={{ display: 'block', marginBottom: '0.25rem' }}>
-                        {notification.type === 'success' ? 'Thành công' : 'Lỗi'}
-                    </strong>
-                    <span>{notification.message}</span>
-                </div>
-            )}
+        <div style={{ minHeight: '100vh', backgroundColor: '#0a0d16', color: 'white' }}>
+            <main ref={movieRef} style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+                <Link href="/admin/dashboard" style={{ color: '#3b82f6', textDecoration: 'none', marginBottom: '1rem', display: 'inline-block' }}>
+                    ← Quay lại Dashboard
+                </Link>
 
-            {/* ... Confirm Modal ... */}
-            {confirmModal.open && (
-                <div style={{
-                    position: 'fixed',
-                    inset: 0,
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 150
-                }}>
-                    <div style={{
-                        backgroundColor: '#1f2937',
-                        padding: '1.75rem',
-                        borderRadius: '0.75rem',
-                        width: '100%',
-                        maxWidth: '480px',
-                        boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
-                    }}>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>{confirmModal.title}</h3>
-                        <p style={{ color: '#cbd5f5', marginBottom: '1.5rem', lineHeight: 1.5 }}>{confirmModal.message}</p>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                            <button
-                                onClick={closeConfirmModal}
-                                style={{
-                                    backgroundColor: '#4b5563',
-                                    padding: '0.5rem 1.25rem',
-                                    borderRadius: '0.375rem',
-                                    border: 'none',
-                                    color: 'white',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Hủy
-                            </button>
-                            <button
-                                onClick={handleConfirmAction}
-                                style={{
-                                    backgroundColor: '#dc2626',
-                                    padding: '0.5rem 1.25rem',
-                                    borderRadius: '0.375rem',
-                                    border: 'none',
-                                    color: 'white',
-                                    cursor: confirmModal.loading ? 'not-allowed' : 'pointer',
-                                    opacity: confirmModal.loading ? 0.7 : 1
-                                }}
-                                disabled={confirmModal.loading}
-                            >
-                                {confirmModal.loading ? 'Đang xử lý...' : 'Đồng ý'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <button
-                        onClick={() => {
-                            // Lưu flag để biết đang quay lại từ trang sửa
-                            sessionStorage.setItem('returningFromEdit', 'true');
-                            router.push('/admin/dashboard');
-                        }}
-                        style={{
-                            backgroundColor: '#1d4ed8',
-                            padding: '0.5rem 1rem',
-                            borderRadius: '0.375rem',
-                            border: 'none',
-                            color: 'white',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        ← Quay lại Dashboard
-                    </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0 }}>
+                        {movie.title}
+                    </h1>
                     <button
                         onClick={handleDeleteMovie}
-                        style={{
-                            backgroundColor: '#dc2626',
-                            padding: '0.5rem 1rem',
-                            borderRadius: '0.375rem',
-                            border: 'none',
-                            color: 'white',
-                            cursor: 'pointer'
-                        }}
+                        style={{ backgroundColor: '#ef4444', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
                     >
-                        🗑️ Xóa phim này
+                        Xóa Phim
                     </button>
                 </div>
 
-                <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.75rem', marginBottom: '2rem' }}>
-                    <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem' }}>{movie.title}</h1>
-                    <form onSubmit={handleUpdateMovie} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                            <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên phim</label>
-                                <input
-                                    type="text"
-                                    value={formData.title}
-                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thumbnail</label>
-                                <input
-                                    type="url"
-                                    value={formData.thumbnail}
-                                    onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        {/* ** [START] THAY ĐỔI (6/7): Cấu trúc lại grid thành 5 cột để thêm Định dạng phim ** */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: '1rem' }}>
-                            <div ref={dropdownRef} style={{ position: 'relative' }}>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thể loại (Có thể chọn nhiều)</label>
-
-                                {/* Input/Display Field */}
-                                <div
-                                    onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.5rem 1rem',
-                                        borderRadius: '0.375rem',
-                                        backgroundColor: '#374151',
-                                        color: formData.category.length === 0 ? '#9ca3af' : 'white',
-                                        border: '1px solid #4b5563',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        minHeight: '40px'
-                                    }}
-                                >
-                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90%' }}>
-                                        {getCategoryDisplay()}
-                                    </span>
-                                    <span style={{
-                                        transform: isCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                                        transition: 'transform 0.2s',
-                                    }}>
-                                        ▼
-                                    </span>
-                                </div>
-
-                                {/* Dropdown Menu */}
-                                {isCategoryDropdownOpen && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        top: '100%',
-                                        left: 0,
-                                        right: 0,
-                                        marginTop: '0.25rem',
-                                        backgroundColor: '#1f2937',
-                                        border: '1px solid #4b5563',
-                                        borderRadius: '0.375rem',
-                                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                                        zIndex: 10,
-                                        maxHeight: '250px',
-                                        overflowY: 'auto',
-                                        padding: '0.5rem',
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(2, 1fr)',
-                                        gap: '0.5rem'
-                                    }}>
-                                        {CATEGORIES.map((cat) => (
-                                            <div
-                                                key={cat}
-                                                onClick={() => handleCategoryChange(cat, !formData.category.includes(cat))}
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    padding: '0.3rem 0.5rem',
-                                                    borderRadius: '0.25rem',
-                                                    cursor: 'pointer',
-                                                    backgroundColor: formData.category.includes(cat) ? '#3b82f6' : 'transparent',
-                                                    color: 'white',
-                                                    transition: 'background-color 0.1s',
-                                                }}
-                                            >
-                                                {/* Dấu tích V */}
-                                                <span style={{
-                                                    marginRight: '0.5rem',
-                                                    color: 'white',
-                                                    minWidth: '1rem'
-                                                }}>
-                                                    {formData.category.includes(cat) ? '✓' : ''}
-                                                </span>
-                                                <span style={{ flex: 1 }}>{cat}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* [NEW] Định dạng phim */}
-                            <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Định dạng</label>
-                                <select
-                                    value={formData.format}
-                                    onChange={(e) => setFormData({ ...formData, format: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563', height: '40px' }}
-                                >
-                                    <option value="Phim lẻ">Phim lẻ</option>
-                                    <option value="Phim bộ">Phim bộ</option>
-                                </select>
-                            </div>
-
-                            {/* Năm */}
-                            <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Năm</label>
-                                <input
-                                    type="number"
-                                    value={formData.year}
-                                    onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                />
-                            </div>
-                            {/* Tổng tập */}
-                            <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tổng tập</label>
-                                <input
-                                    type="number"
-                                    value={formData.totalEpisodes}
-                                    onChange={(e) => setFormData({ ...formData, totalEpisodes: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                />
-                            </div>
-                            {/* Created At */}
-                            <div>
-                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Created At</label>
-                                <input
-                                    type="datetime-local"
-                                    value={formData.createdAt}
-                                    onChange={(e) => setFormData({ ...formData, createdAt: e.target.value })}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                />
-                            </div>
-                        </div>
-                        {/* ** [END] THAY ĐỔI ** */}
-
-                        <div>
-                            <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Mô tả</label>
-                            <textarea
-                                rows="3"
-                                value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                {/* PLAYER VÀ LIST TẬP PHIM */}
+                <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '2rem' }}>
+                    {/* KHU VỰC PHÁT VIDEO */}
+                    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '0.75rem', paddingBottom: '56.25%', height: 0 }}>
+                        {currentEpisode?.videoUrl ? (
+                            <Player
+                                videoUrl={currentEpisode.videoUrl}
+                                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
                             />
-                        </div>
+                        ) : (
+                            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: '#1e293b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#cbd5e1', fontSize: '1.25rem' }}>
+                                Vui lòng chọn tập phim hoặc thêm tập mới.
+                            </div>
+                        )}
 
-                        <button
-                            type="submit"
-                            disabled={savingMovie}
-                            style={{
-                                width: '100%',
-                                backgroundColor: savingMovie ? '#6b7280' : '#0ea5e9',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                padding: '0.75rem',
-                                borderRadius: '0.375rem',
-                                border: 'none',
-                                cursor: savingMovie ? 'not-allowed' : 'pointer'
-                            }}
-                        >
-                            {savingMovie ? 'Đang lưu...' : '💾 Lưu thay đổi phim'}
-                        </button>
-                    </form>
-                </div>
-
-                <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.75rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>📺 Danh sách tập</h2>
-                        <span style={{ color: '#94a3b8' }}>{episodes.length} tập</span>
                     </div>
 
-                    {episodesLoading ? (
-                        <p>Đang tải danh sách tập...</p>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                            {episodes.length === 0 && <p style={{ color: '#94a3b8' }}>Chưa có tập nào.</p>}
-                            {/* ... Phần hiển thị danh sách tập giữ nguyên ... */}
-                            {episodes.map((episode) => (
-                                <div key={episode.id} style={{ backgroundColor: '#111827', padding: '1rem', borderRadius: '0.5rem' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1.5fr 1fr 1fr', gap: '0.5rem', alignItems: 'center' }}>
-                                        <input
-                                            type="number"
-                                            value={episode.episodeNumber}
-                                            // ** THAY ĐỔI: Sử dụng handleEpisodeFieldChange cho episodeNumber **
-                                            onChange={(e) => handleEpisodeFieldChange(episode.id, 'episodeNumber', e.target.value)}
-                                            placeholder="Số tập"
-                                            style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                        />
-                                        <input
-                                            type="text"
-                                            value={episode.title}
-                                            onChange={(e) => handleEpisodeFieldChange(episode.id, 'title', e.target.value)}
-                                            placeholder="Tiêu đề"
-                                            style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                        />
-                                        <input
-                                            type="url"
-                                            value={episode.videoUrl}
-                                            onChange={(e) => handleEpisodeFieldChange(episode.id, 'videoUrl', e.target.value)}
-                                            placeholder="Video URL"
-                                            style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                        />
-                                        <input
-                                            type="datetime-local"
-                                            value={episode.createdAtInput}
-                                            onChange={(e) => handleEpisodeFieldChange(episode.id, 'createdAtInput', e.target.value)}
-                                            style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                                        />
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            <button
-                                                onClick={() => handleSaveEpisode(episode.id)}
-                                                style={{ flex: 1, backgroundColor: '#16a34a', border: 'none', borderRadius: '0.375rem', color: 'white', padding: '0.5rem', cursor: 'pointer' }}
-                                            >
-                                                💾 Lưu
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteEpisode(episode.id, episode.title || `Tập ${episode.episodeNumber}`)}
-                                                style={{ flex: 1, backgroundColor: '#dc2626', border: 'none', borderRadius: '0.375rem', color: 'white', padding: '0.5rem', cursor: 'pointer' }}
-                                            >
-                                                🗑️ Xóa
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleAddEpisode} style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>➕ Thêm tập mới</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-                            <input
-                                type="number"
-                                value={newEpisode.episodeNumber}
-                                onChange={(e) => handleNewEpisodeNumberChange(e.target.value)}
-                                placeholder="Số tập"
-                                style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                            />
-                            <input
-                                type="text"
-                                value={newEpisode.title}
-                                onChange={(e) => setNewEpisode({ ...newEpisode, title: e.target.value })}
-                                placeholder="Tiêu đề"
-                                style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                            />
-                            <input
-                                type="url"
-                                value={newEpisode.videoUrl}
-                                onChange={(e) => setNewEpisode({ ...newEpisode, videoUrl: e.target.value })}
-                                placeholder="Video URL"
-                                required
-                                style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                            />
-                            <input
-                                type="datetime-local"
-                                value={newEpisode.createdAt}
-                                onChange={(e) => setNewEpisode({ ...newEpisode, createdAt: e.target.value })}
-                                style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
-                            />
-                        </div>
-                        <button
-                            type="submit"
-                            style={{
-                                backgroundColor: '#2563eb',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                padding: '0.75rem',
-                                borderRadius: '0.375rem',
-                                border: 'none',
-                                cursor: 'pointer'
+                    {/* LIST TẬP PHIM */}
+                    <div style={{ maxHeight: 'calc(100vh - 150px)', overflowY: 'auto', backgroundColor: '#1e293b', padding: '1rem', borderRadius: '0.75rem' }}>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginTop: 0, marginBottom: '1rem' }}>
+                            Danh sách Tập ({episodes.length} tập)
+                        </h3>
+                        {episodes.map((ep) => (
+                            <div key={ep.id} style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '0.5rem',
+                                marginBottom: '0.5rem',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                backgroundColor: currentEpisode?.id === ep.id ? '#3b82f6' : 'transparent',
+                                color: currentEpisode?.id === ep.id ? 'white' : '#cbd5e1',
+                                border: '1px solid #374151'
                             }}
-                        >
-                            ➕ Thêm tập
-                        </button>
-                    </form>
+                                onClick={() => router.push(`?ep=${ep.episodeNumber}`, { scroll: false })}
+                            >
+                                <span>Tập {ep.episodeNumber}</span>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteEpisode(ep.id, ep.episodeNumber); }}
+                                    style={{
+                                        backgroundColor: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '0.25rem',
+                                        padding: '0.25rem 0.5rem',
+                                        fontSize: '0.75rem',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Xóa
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            </div>
+
+
+                {/* THÔNG TIN VÀ FORM */}
+                <div style={{ marginTop: '2rem' }}>
+                    <div style={{ marginBottom: '2rem' }}>
+                        <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+                            Thông tin chi tiết
+                        </h2>
+                        <p style={{ color: '#cbd5e1', lineHeight: '1.75', margin: 0 }}>
+                            Thể loại: <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{movieCategoryDisplay}</span>
+                        </p>
+                        <p style={{ color: '#cbd5e1', lineHeight: '1.75', margin: 0 }}>
+                            Tổng số tập: <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{movie.totalEpisodes || episodes.length}</span>
+                        </p>
+                        <p style={{ color: '#cbd5e1', lineHeight: '1.75', margin: 0 }}>
+                            {movie.description || 'Chưa có mô tả cho phim này.'}
+                        </p>
+                    </div>
+
+                    <div style={{ backgroundColor: '#1e293b', padding: '1.5rem', borderRadius: '0.75rem' }}>
+                        <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', marginTop: 0, marginBottom: '1rem' }}>
+                            Thêm Tập Phim Mới
+                        </h2>
+                        <form onSubmit={handleAddEpisode} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '0.5fr 3fr 1.5fr', gap: '1rem' }}>
+                                <input
+                                    type="number"
+                                    value={newEpisode.episodeNumber}
+                                    onChange={(e) => setNewEpisode({ ...newEpisode, episodeNumber: parseInt(e.target.value) || 1 })}
+                                    placeholder="Số tập"
+                                    required
+                                    style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                />
+                                <input
+                                    type="url"
+                                    value={newEpisode.videoUrl}
+                                    onChange={(e) => setNewEpisode({ ...newEpisode, videoUrl: e.target.value })}
+                                    placeholder="Video URL"
+                                    required
+                                    style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                />
+                                <input
+                                    type="datetime-local"
+                                    value={newEpisode.createdAt}
+                                    onChange={(e) => setNewEpisode({ ...newEpisode, createdAt: e.target.value })}
+                                    style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={isSaving}
+                                style={{
+                                    backgroundColor: isSaving ? '#60a5fa' : '#2563eb',
+                                    color: 'white',
+                                    fontWeight: 'bold',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.375rem',
+                                    border: 'none',
+                                    cursor: isSaving ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {isSaving ? 'Đang thêm...' : '➕ Thêm tập'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {/* Trigger */}<div id="suggested-trigger" style={{ height: '1px', marginTop: '3rem' }}></div>
+
+                {/* Suggested Movies (Nếu cần) */}
+                {showSuggested && movie && (
+                    <SuggestedMoviesSection
+                        movieId={movie.id}
+                        movieCategory={movie.category}
+                        movieCategoryDisplay={movieCategoryDisplay}
+                    />
+                )}
+            </main>
+
+            <footer style={{
+                backgroundColor: '#0a0d16',
+                borderTop: '1px solid #1e293b',
+                padding: '2rem 1.5rem',
+                textAlign: 'center'
+            }}>
+                <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>
+                    Copyright © {new Date().getFullYear()} by NiceAnime
+                </p>
+            </footer>
+
+            <style jsx global>{`
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `}</style>
         </div>
     );
 }
