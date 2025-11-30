@@ -2566,6 +2566,813 @@
 
 
 // FILE: app/movie/[id]/page.jsx
+// 'use client';
+// import Image from 'next/image';
+// import { useState, useEffect, useCallback, memo, useMemo } from 'react';
+// import { db } from '@/lib/firebase';
+// import { doc, getDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+// import { useParams, useSearchParams, useRouter } from 'next/navigation';
+// import Link from 'next/link';
+// import dynamic from 'next/dynamic';
+
+// // Lazy load suggested movies
+// const SuggestedMoviesSection = dynamic(() => import('./SuggestedMoviesSection'), {
+//     loading: () => null,
+//     ssr: false
+// });
+
+// // Memoized Episode Button
+// const EpisodeButton = memo(({ episode, isCurrent, movieSlug, movieId, onClick, isChanging }) => {
+//     const handleClick = useCallback((e) => {
+//         e.preventDefault();
+//         if (!isChanging) onClick(episode);
+//     }, [episode, onClick, isChanging]);
+
+//     return (
+//         <Link
+//             href={`/movie/${movieSlug || movieId}?ep=${episode.episodeNumber}`}
+//             onClick={handleClick}
+//             prefetch={false}
+//             style={{
+//                 backgroundColor: isCurrent ? '#3b82f6' : '#334155',
+//                 color: 'white',
+//                 padding: '0.75rem',
+//                 borderRadius: '0.5rem',
+//                 textAlign: 'center',
+//                 textDecoration: 'none',
+//                 fontWeight: isCurrent ? 'bold' : '600',
+//                 fontSize: '0.875rem',
+//                 transition: 'background-color 0.15s ease',
+//                 border: isCurrent ? '2px solid #60a5fa' : '2px solid transparent',
+//                 cursor: isChanging ? 'wait' : 'pointer',
+//                 opacity: isChanging ? 0.6 : 1,
+//                 display: 'block',
+//                 pointerEvents: isChanging ? 'none' : 'auto'
+//             }}
+//             aria-label={`Xem tập ${episode.episodeNumber}`}
+//         >
+//             {episode.episodeNumber}
+//         </Link>
+//     );
+// });
+// EpisodeButton.displayName = 'EpisodeButton';
+
+// export default function MovieDetail() {
+//     const params = useParams();
+//     const searchParams = useSearchParams();
+//     const router = useRouter();
+//     const [movie, setMovie] = useState(null);
+//     const [episodes, setEpisodes] = useState([]);
+//     const [currentEpisode, setCurrentEpisode] = useState(null);
+//     const [loading, setLoading] = useState(true);
+//     const [loadingEpisodes, setLoadingEpisodes] = useState(true);
+//     const [isChangingEpisode, setIsChangingEpisode] = useState(false);
+//     const [iframeLoaded, setIframeLoaded] = useState(false);
+//     const [showSuggested, setShowSuggested] = useState(false);
+//     const [mountIframe, setMountIframe] = useState(false);
+//     const [showAllEpisodes, setShowAllEpisodes] = useState(false);
+//     const [userClickedPlay, setUserClickedPlay] = useState(false);
+
+//     // Load data với optimization
+//     useEffect(() => {
+//         let isMounted = true;
+
+//         const loadData = async () => {
+//             try {
+//                 // Load movie
+//                 const moviesQuery = query(
+//                     collection(db, 'movies'),
+//                     where('slug', '==', params.id),
+//                     limit(1)
+//                 );
+//                 const snapshot = await getDocs(moviesQuery);
+
+//                 let movieData = null;
+//                 if (!snapshot.empty) {
+//                     movieData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+//                 } else {
+//                     const docRef = doc(db, 'movies', params.id);
+//                     const docSnap = await getDoc(docRef);
+//                     if (docSnap.exists()) {
+//                         movieData = { id: docSnap.id, ...docSnap.data() };
+//                     }
+//                 }
+
+//                 if (!isMounted) return;
+
+//                 if (movieData) {
+//                     setMovie(movieData);
+//                     setLoading(false);
+
+//                     // Load episodes với cache
+//                     const cacheKey = `episodes_${movieData.id}`;
+//                     let episodesList = null;
+                    
+//                     try {
+//                         const cached = localStorage.getItem(cacheKey);
+//                         if (cached) {
+//                             const parsed = JSON.parse(cached);
+//                             if (parsed?.data && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp) < 600000) {
+//                                 episodesList = parsed.data;
+//                             }
+//                         }
+//                     } catch {}
+
+//                     if (!episodesList) {
+//                         const episodesSnapshot = await getDocs(query(
+//                             collection(db, 'episodes'),
+//                             where('movieId', '==', movieData.id),
+//                             orderBy('episodeNumber', 'asc')
+//                         ));
+
+//                         if (!isMounted) return;
+
+//                         episodesList = episodesSnapshot.docs.map(doc => ({
+//                             id: doc.id,
+//                             episodeNumber: doc.data().episodeNumber,
+//                             title: doc.data().title,
+//                             videoUrl: doc.data().videoUrl
+//                         }));
+
+//                         try {
+//                             localStorage.setItem(cacheKey, JSON.stringify({ 
+//                                 data: episodesList, 
+//                                 timestamp: Date.now() 
+//                             }));
+//                         } catch {}
+//                     }
+
+//                     const ep = parseInt(searchParams.get('ep')) || 1;
+//                     const episode = episodesList.find(e => e.episodeNumber === ep) || episodesList[0];
+//                     setCurrentEpisode(episode);
+
+//                     // Defer episodes render
+//                     requestIdleCallback(() => {
+//                         if (isMounted) {
+//                             setEpisodes(episodesList);
+//                             setLoadingEpisodes(false);
+//                         }
+//                     }, { timeout: 500 });
+//                 } else {
+//                     setLoading(false);
+//                 }
+//             } catch (error) {
+//                 console.error('Error loading data:', error);
+//                 if (isMounted) setLoading(false);
+//             }
+//         };
+
+//         loadData();
+
+//         return () => {
+//             isMounted = false;
+//         };
+//     }, [params.id, searchParams]);
+
+//     // Lazy load suggested movies
+//     useEffect(() => {
+//         if (!movie) return;
+
+//         const observer = new IntersectionObserver(
+//             (entries) => {
+//                 if (entries[0].isIntersecting && !showSuggested) {
+//                     requestIdleCallback(() => setShowSuggested(true), { timeout: 1000 });
+//                 }
+//             },
+//             { rootMargin: '400px' }
+//         );
+
+//         const target = document.getElementById('suggested-trigger');
+//         if (target) observer.observe(target);
+
+//         return () => observer.disconnect();
+//     }, [movie, showSuggested]);
+
+//     // Update meta tags
+//     useEffect(() => {
+//         if (!movie) return;
+
+//         document.title = `${movie.title} - Xem phim ${movie.title} Vietsub HD | NiceAnime`;
+
+//         const metas = [
+//             ['name', 'description', movie.description 
+//                 ? `Xem phim ${movie.title} (${movie.year}) Vietsub HD. ${movie.description.substring(0, 150)}...`
+//                 : `Xem phim ${movie.title} (${movie.year}) Vietsub HD trên NiceAnime`],
+//             ['property', 'og:title', movie.title],
+//             ['property', 'og:image', movie.thumbnail],
+//             ['property', 'og:type', 'video.movie']
+//         ];
+
+//         requestIdleCallback(() => {
+//             metas.forEach(([attr, value, content]) => {
+//                 const meta = document.querySelector(`meta[${attr}="${value}"]`);
+//                 if (meta) meta.setAttribute('content', content);
+//             });
+//         });
+//     }, [movie]);
+
+//     // Preconnect to video domain
+//     useEffect(() => {
+//         if (!currentEpisode?.videoUrl) return;
+        
+//         try {
+//             const url = new URL(currentEpisode.videoUrl);
+//             const origin = `${url.protocol}//${url.host}`;
+            
+//             ['preconnect', 'dns-prefetch'].forEach(rel => {
+//                 if (!document.querySelector(`link[rel="${rel}"][href="${origin}"]`)) {
+//                     const link = document.createElement('link');
+//                     link.rel = rel;
+//                     link.href = origin;
+//                     document.head.appendChild(link);
+//                 }
+//             });
+//         } catch {}
+//     }, [currentEpisode?.videoUrl]);
+
+//     // Handle play button click
+//     const handlePlayClick = useCallback(() => {
+//         setUserClickedPlay(true);
+//         setMountIframe(true);
+//     }, []);
+
+//     // Handle episode change
+//     const handleEpisodeChange = useCallback((episode) => {
+//         if (isChangingEpisode || episode.id === currentEpisode?.id) return;
+        
+//         setIsChangingEpisode(true);
+//         setIframeLoaded(false);
+//         setCurrentEpisode(episode);
+//         setMountIframe(false);
+//         setUserClickedPlay(false);
+        
+//         router.push(`?ep=${episode.episodeNumber}`, { scroll: false });
+//         window.scrollTo({ top: 0, behavior: 'smooth' });
+        
+//         setTimeout(() => setIsChangingEpisode(false), 200);
+//     }, [isChangingEpisode, currentEpisode?.id, router]);
+
+//     // Category data
+//     const categoryArray = useMemo(() => {
+//         const cat = movie?.category;
+//         if (!cat) return [];
+//         return Array.isArray(cat) ? cat : cat.split(',').map(c => c.trim()).filter(Boolean);
+//     }, [movie?.category]);
+
+//     const movieCategoryDisplay = useMemo(() => 
+//         categoryArray.length ? categoryArray.join(', ') : '', 
+//     [categoryArray]);
+
+//     if (loading) {
+//         return (
+//             <div style={{
+//                 minHeight: '100vh',
+//                 backgroundColor: '#0f172a',
+//                 color: 'white',
+//                 display: 'flex',
+//                 alignItems: 'center',
+//                 justifyContent: 'center',
+//                 flexDirection: 'column'
+//             }}>
+//                 <div style={{
+//                     width: '50px',
+//                     height: '50px',
+//                     border: '4px solid #334155',
+//                     borderTop: '4px solid #3b82f6',
+//                     borderRadius: '50%',
+//                     animation: 'spin 1s linear infinite'
+//                 }}></div>
+//                 <p style={{ marginTop: '1rem' }}>Đang tải phim...</p>
+//             </div>
+//         );
+//     }
+
+//     if (!movie) {
+//         return (
+//             <div style={{
+//                 minHeight: '100vh',
+//                 backgroundColor: '#0f172a',
+//                 color: 'white',
+//                 display: 'flex',
+//                 alignItems: 'center',
+//                 justifyContent: 'center',
+//                 flexDirection: 'column'
+//             }}>
+//                 <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>😞</div>
+//                 <h2 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Không tìm thấy phim!</h2>
+//                 <Link href="/" style={{
+//                     backgroundColor: '#3b82f6',
+//                     padding: '0.75rem 2rem',
+//                     borderRadius: '0.5rem',
+//                     textDecoration: 'none',
+//                     color: 'white',
+//                     fontWeight: '600'
+//                 }}>← Quay về trang chủ</Link>
+//             </div>
+//         );
+//     }
+
+//     return (
+//         <div style={{ minHeight: '100vh', backgroundColor: '#05060b', color: 'white', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+//             <header style={{
+//                 position: 'fixed',
+//                 top: 0,
+//                 left: 0,
+//                 right: 0,
+//                 zIndex: 50,
+//                 background: 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)',
+//                 borderBottom: '1px solid rgba(255,255,255,0.08)',
+//                 backdropFilter: 'blur(10px)',
+//                 boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
+//             }}>
+//                 <div style={{
+//                     maxWidth: '1300px',
+//                     margin: '0 auto',
+//                     padding: '0.35rem 1.5rem',
+//                     display: 'flex',
+//                     alignItems: 'center',
+//                     justifyContent: 'space-between',
+//                     minHeight: '72px'
+//                 }}>
+//                     <Link href="/" prefetch={false} style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+//                         <Image
+//                             src="/NiceAnime-header.png"
+//                             alt="NiceAnime"
+//                             width={240}
+//                             height={72}
+//                             priority
+//                             quality={90}
+//                             style={{ height: '72px', width: 'auto', objectFit: 'contain' }}
+//                         />
+//                     </Link>
+//                     <div style={{ textAlign: 'right' }}>
+//                         <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>Đang xem:</p>
+//                         <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>{movie.title}</p>
+//                     </div>
+//                 </div>
+//             </header>
+
+//             <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '7rem 1rem 2rem 1rem' }}>
+//                 {/* Video Player */}
+//                 <div style={{
+//                     marginBottom: '2rem',
+//                     backgroundColor: '#1e293b',
+//                     borderRadius: '0.75rem',
+//                     overflow: 'hidden',
+//                     boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)'
+//                 }}>
+//                     {currentEpisode ? (
+//                         <>
+//                             <div style={{
+//                                 position: 'relative',
+//                                 paddingBottom: '56.25%',
+//                                 height: 0,
+//                                 overflow: 'hidden',
+//                                 backgroundColor: '#000'
+//                             }}>
+//                                 {/* Play Button Overlay */}
+//                                 {!userClickedPlay && (
+//                                     <div style={{
+//                                         position: 'absolute',
+//                                         top: 0,
+//                                         left: 0,
+//                                         right: 0,
+//                                         bottom: 0,
+//                                         display: 'flex',
+//                                         alignItems: 'center',
+//                                         justifyContent: 'center',
+//                                         backgroundColor: 'rgba(0,0,0,0.7)',
+//                                         zIndex: 20,
+//                                         cursor: 'pointer'
+//                                     }}
+//                                     onClick={handlePlayClick}>
+//                                         <div style={{
+//                                             width: '80px',
+//                                             height: '80px',
+//                                             borderRadius: '50%',
+//                                             backgroundColor: '#3b82f6',
+//                                             display: 'flex',
+//                                             alignItems: 'center',
+//                                             justifyContent: 'center',
+//                                             transition: 'transform 0.2s'
+//                                         }}
+//                                         onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+//                                         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+//                                             <div style={{
+//                                                 width: 0,
+//                                                 height: 0,
+//                                                 borderLeft: '25px solid white',
+//                                                 borderTop: '15px solid transparent',
+//                                                 borderBottom: '15px solid transparent',
+//                                                 marginLeft: '5px'
+//                                             }}></div>
+//                                         </div>
+//                                     </div>
+//                                 )}
+
+//                                 {/* Loading Spinner */}
+//                                 {mountIframe && !iframeLoaded && (
+//                                     <div style={{
+//                                         position: 'absolute',
+//                                         top: '50%',
+//                                         left: '50%',
+//                                         transform: 'translate(-50%, -50%)',
+//                                         zIndex: 10
+//                                     }}>
+//                                         <div style={{
+//                                             width: '50px',
+//                                             height: '50px',
+//                                             border: '4px solid #334155',
+//                                             borderTop: '4px solid #3b82f6',
+//                                             borderRadius: '50%',
+//                                             animation: 'spin 1s linear infinite'
+//                                         }}></div>
+//                                     </div>
+//                                 )}
+                                
+//                                 {/* Iframe - only mount when user clicks play */}
+//                                 {mountIframe && (
+//                                     <iframe
+//                                         key={currentEpisode.episodeNumber}
+//                                         src={currentEpisode.videoUrl}
+//                                         style={{
+//                                             position: 'absolute',
+//                                             top: 0,
+//                                             left: 0,
+//                                             width: '100%',
+//                                             height: '100%',
+//                                             border: 'none',
+//                                             opacity: iframeLoaded ? 1 : 0,
+//                                             transition: 'opacity 0.3s'
+//                                         }}
+//                                         allowFullScreen
+//                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+//                                         loading="lazy"
+//                                         title={`${movie.title} - Tập ${currentEpisode.episodeNumber}`}
+//                                         onLoad={() => setIframeLoaded(true)}
+//                                     />
+//                                 )}
+//                             </div>
+
+//                             <div style={{
+//                                 padding: '1rem 1.5rem',
+//                                 backgroundColor: '#334155'
+//                             }}>
+//                                 <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0 0 0.5rem 0' }}>
+//                                     {currentEpisode.title}
+//                                 </h1>
+//                                 <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.875rem', color: '#cbd5e1', flexWrap: 'wrap' }}>
+//                                     <span>📅 {movie.year}</span>
+//                                     <span>🎭 {movieCategoryDisplay}</span>
+//                                     <span>📺 Tập {currentEpisode.episodeNumber}/{movie.totalEpisodes}</span>
+//                                 </div>
+//                             </div>
+//                         </>
+//                     ) : (
+//                         <div style={{ padding: '4rem', textAlign: 'center', color: '#9ca3af' }}>
+//                             {loadingEpisodes ? 'Đang tải tập phim...' : 'Không tìm thấy tập phim'}
+//                         </div>
+//                     )}
+//                 </div>
+
+//                 {/* Episodes List */}
+//                 {episodes.length > 0 && (
+//                     <div style={{
+//                         backgroundColor: '#1e293b',
+//                         borderRadius: '0.75rem',
+//                         padding: '1.5rem',
+//                         marginBottom: '2rem',
+//                         boxShadow: '0 10px 15px rgba(0,0,0,0.3)',
+//                         contentVisibility: 'auto'
+//                     }}>
+//                         <h2 style={{
+//                             fontSize: '1.5rem',
+//                             fontWeight: 'bold',
+//                             color: '#60a5fa',
+//                             margin: '0 0 1rem 0'
+//                         }}>
+//                             📺 Danh sách tập Vietsub ({episodes.length} tập)
+//                         </h2>
+
+//                         <div style={{
+//                             display: 'grid',
+//                             gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
+//                             gap: '0.75rem',
+//                             maxHeight: '400px',
+//                             overflowY: 'auto',
+//                             padding: '0.5rem'
+//                         }}>
+//                             {(showAllEpisodes ? episodes : episodes.slice(0, 50)).map((episode) => (
+//                                 <EpisodeButton
+//                                     key={episode.id}
+//                                     episode={episode}
+//                                     isCurrent={currentEpisode?.episodeNumber === episode.episodeNumber}
+//                                     movieSlug={movie.slug}
+//                                     movieId={movie.id}
+//                                     onClick={handleEpisodeChange}
+//                                     isChanging={isChangingEpisode}
+//                                 />
+//                             ))}
+//                         </div>
+                        
+//                         {episodes.length > 50 && (
+//                             <button
+//                                 onClick={() => setShowAllEpisodes(v => !v)}
+//                                 style={{
+//                                     backgroundColor: '#3b82f6',
+//                                     color: 'white',
+//                                     padding: '0.5rem 1.5rem',
+//                                     borderRadius: '0.5rem',
+//                                     fontWeight: 600,
+//                                     border: 'none',
+//                                     cursor: 'pointer',
+//                                     marginTop: '1rem',
+//                                     width: '100%'
+//                                 }}
+//                             >
+//                                 {showAllEpisodes ? 'Thu gọn' : `Xem tất cả ${episodes.length} tập`}
+//                             </button>
+//                         )}
+//                     </div>
+//                 )}
+
+//                 {/* Movie Info */}
+//                 <div style={{
+//                     display: 'grid',
+//                     gridTemplateColumns: '300px 1fr',
+//                     gap: '2rem',
+//                     marginBottom: '3rem'
+//                 }}>
+//                     <div style={{
+//                         position: 'relative',
+//                         width: '100%',
+//                         aspectRatio: '2 / 3'
+//                     }}>
+//                         <Image
+//                             src={movie.thumbnail}
+//                             alt={`${movie.title} poster`}
+//                             fill
+//                             sizes="(max-width: 768px) 100vw, 300px"
+//                             style={{
+//                                 objectFit: 'cover',
+//                                 borderRadius: '0.75rem',
+//                                 boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)'
+//                             }}
+//                             loading="lazy"
+//                             quality={75}
+//                         />
+//                     </div>
+
+//                     <div>
+//                         <h1 style={{
+//                             fontSize: '2.5rem',
+//                             fontWeight: 'bold',
+//                             background: 'linear-gradient(to right, #60a5fa, #a78bfa)',
+//                             WebkitBackgroundClip: 'text',
+//                             WebkitTextFillColor: 'transparent',
+//                             margin: '0 0 1.5rem 0'
+//                         }}>
+//                             {movie.title}
+//                         </h1>
+
+//                         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+//                             {categoryArray.map((cat, idx) => (
+//                                 <span key={idx} style={{
+//                                     backgroundColor: '#4c1d95',
+//                                     padding: '0.5rem 1rem',
+//                                     borderRadius: '9999px',
+//                                     fontSize: '0.875rem',
+//                                     fontWeight: '600'
+//                                 }}>{cat}</span>
+//                             ))}
+//                             <span style={{
+//                                 backgroundColor: '#166534',
+//                                 padding: '0.5rem 1rem',
+//                                 borderRadius: '9999px',
+//                                 fontSize: '0.875rem',
+//                                 fontWeight: '600'
+//                             }}>{movie.year}</span>
+//                             <span style={{
+//                                 backgroundColor: '#7c2d12',
+//                                 padding: '0.5rem 1rem',
+//                                 borderRadius: '9999px',
+//                                 fontSize: '0.875rem',
+//                                 fontWeight: '600'
+//                             }}>{movie.totalEpisodes} tập</span>
+//                         </div>
+
+//                         <div style={{
+//                             backgroundColor: '#1e293b',
+//                             padding: '1.5rem',
+//                             borderRadius: '0.75rem'
+//                         }}>
+//                             <h3 style={{
+//                                 fontSize: '1.25rem',
+//                                 fontWeight: 'bold',
+//                                 color: '#60a5fa',
+//                                 margin: '0 0 1rem 0'
+//                             }}>📖 Nội dung phim</h3>
+//                             <p style={{
+//                                 color: '#cbd5e1',
+//                                 lineHeight: '1.75',
+//                                 margin: 0
+//                             }}>
+//                                 {movie.description || 'Chưa có mô tả cho phim này.'}
+//                             </p>
+//                         </div>
+//                     </div>
+//                 </div>
+
+//                 {/* Trigger */}
+//                 <div id="suggested-trigger" style={{ height: '1px' }}></div>
+
+//                 {/* Suggested Movies */}
+//                 {showSuggested && (
+//                     <SuggestedMoviesSection 
+//                         movieId={movie.id}
+//                         movieCategory={movie.category}
+//                         movieCategoryDisplay={movieCategoryDisplay}
+//                     />
+//                 )}
+//             </main>
+
+//             <footer style={{
+//                             backgroundColor: '#0a0d16',
+//                             borderTop: '1px solid #1e293b',
+//                             padding: '3rem 1.5rem 2rem',
+//                         }}>
+//                             <div style={{
+//                                 maxWidth: '1300px',
+//                                 margin: '0 auto',
+//                             }}>
+//                                 <div style={{
+//                                     display: 'grid',
+//                                     // Thay đổi cấu trúc lưới để chứa 5 cột (hoặc 4 cột nếu cần)
+//                                     gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+//                                     gap: '3rem',
+//                                     marginBottom: '3rem',
+//                                 }}>
+//                                     <div>
+//                                         <div style={{
+//                                             display: 'flex',
+//                                             alignItems: 'center',
+//                                             gap: '0.5rem',
+//                                             marginBottom: '1rem'
+//                                         }}>
+//                                             <Image
+//                                                 src="/NiceAnime-header.png"
+//                                                 alt="NiceAnime Logo"
+//                                                 width={120}
+//                                                 height={36}
+//                                                 style={{ height: '36px', width: 'auto' }}
+//                                             />
+//                                         </div>
+//                                         <p style={{
+//                                             color: '#94a3b8',
+//                                             fontSize: '0.9rem',
+//                                             lineHeight: '1.6',
+//                                             marginBottom: '1rem'
+//                                         }}>
+//                                             NiceAnime là nền tảng xem phim anime miễn phí hàng đầu, nơi bạn có thể khám phá hàng ngàn bộ phim với phụ đề Vietsub chất lượng cao được cập nhật liên tục mỗi ngày.
+//                                         </p>
+//                                     </div>
+            
+//                                     <div>
+//                                         <h3 style={{
+//                                             color: 'white',
+//                                             fontSize: '1.1rem',
+//                                             fontWeight: '700',
+//                                             marginBottom: '1rem'
+//                                         }}>
+//                                             Danh Mục
+//                                         </h3>
+//                                         <ul style={{
+//                                             listStyle: 'none',
+//                                             padding: 0,
+//                                             margin: 0,
+//                                             display: 'flex',
+//                                             flexDirection: 'column',
+//                                             gap: '0.75rem'
+//                                         }}>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Mới (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Hay (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime Vietsub (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Phim Kinh Dị (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Anime HD (Đang Cập Nhật)</a></li>
+//                                         </ul>
+//                                     </div>
+            
+//                                     <div>
+//                                         <h3 style={{
+//                                             color: 'white',
+//                                             fontSize: '1.1rem',
+//                                             fontWeight: '700',
+//                                             marginBottom: '1rem'
+//                                         }}>
+//                                             Thể Loại
+//                                         </h3>
+//                                         <ul style={{
+//                                             listStyle: 'none',
+//                                             padding: 0,
+//                                             margin: 0,
+//                                             display: 'flex',
+//                                             flexDirection: 'column',
+//                                             gap: '0.75rem'
+//                                         }}>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hành Động (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Phiêu Lưu (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hài Hước (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Lãng Mạn (Đang Cập Nhật)</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Học Đường (Đang Cập Nhật)</a></li>
+//                                         </ul>
+//                                     </div>
+            
+//                                     <div>
+//                                         <h3 style={{
+//                                             color: 'white',
+//                                             fontSize: '1.1rem',
+//                                             fontWeight: '700',
+//                                             marginBottom: '1rem'
+//                                         }}>
+//                                             Hỗ Trợ
+//                                         </h3>
+//                                         <ul style={{
+//                                             listStyle: 'none',
+//                                             padding: 0,
+//                                             margin: 0,
+//                                             display: 'flex',
+//                                             flexDirection: 'column',
+//                                             gap: '0.75rem'
+//                                         }}>
+//                                             <li><a href="/support/privacy" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Chính sách bảo mật</a></li>
+//                                             <li><a href="/support/terms" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Điều khoản sử dụng</a></li>
+//                                             <li><a href="/support/about" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Giới thiệu</a></li>
+//                                             <li><a href="/support/contact" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Liên hệ</a></li>
+//                                         </ul>
+//                                     </div>
+            
+//                                     {/* ** [THÊM MỚI] Cột Hợp Tác ** */}
+//                                     <div>
+//                                         <h3 style={{
+//                                             color: 'white',
+//                                             fontSize: '1.1rem',
+//                                             fontWeight: '700',
+//                                             marginBottom: '1rem'
+//                                         }}>
+//                                             Nguồn
+//                                         </h3>
+//                                         <ul style={{
+//                                             listStyle: 'none',
+//                                             padding: 0,
+//                                             margin: 0,
+//                                             display: 'flex',
+//                                             flexDirection: 'column',
+//                                             gap: '0.75rem'
+//                                         }}>
+//                                             <li><a href="https://phim.nguonc.com/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>https://phim.nguonc.com/</a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}></a></li>
+//                                             <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}></a></li>
+//                                         </ul>
+//                                     </div>
+//                                     {/* ** [KẾT THÚC THÊM MỚI] ** */}
+//                                 </div>
+            
+//                                 <div style={{
+//                                     paddingTop: '2rem',
+//                                     borderTop: '1px solid #1e293b',
+//                                     textAlign: 'center'
+//                                 }}>
+//                                     <p style={{
+//                                         color: '#64748b',
+//                                         fontSize: '0.9rem',
+//                                         marginBottom: '0.5rem'
+//                                     }}>
+//                                         Copyright © {new Date().getFullYear()} by NiceAnime - All rights reserved.
+//                                     </p>
+//                                     <p style={{
+//                                         color: '#475569',
+//                                         fontSize: '0.85rem'
+//                                     }}>
+//                                         Website made by Nguyen Quang Anh
+//                                     </p>
+//                                 </div>
+//                             </div>
+//                         </footer>
+
+//             <style jsx>{`
+//                 @keyframes spin {
+//                     0% { transform: rotate(0deg); }
+//                     100% { transform: rotate(360deg); }
+//                 }
+//             `}</style>
+//         </div>
+//     );
+// }
+
+
+
+// FILE: frontend/app/movie/[id]/page.jsx
+// ✅ FIXED VERSION - Mobile Compatible
 'use client';
 import Image from 'next/image';
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
@@ -2580,6 +3387,29 @@ const SuggestedMoviesSection = dynamic(() => import('./SuggestedMoviesSection'),
     loading: () => null,
     ssr: false
 });
+
+// ✅ FIX: Safe localStorage wrapper
+const safeLocalStorage = {
+    getItem: (key) => {
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                return localStorage.getItem(key);
+            }
+        } catch (error) {
+            console.warn('localStorage get error:', error);
+        }
+        return null;
+    },
+    setItem: (key, value) => {
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                localStorage.setItem(key, value);
+            }
+        } catch (error) {
+            console.warn('localStorage set error:', error);
+        }
+    }
+};
 
 // Memoized Episode Button
 const EpisodeButton = memo(({ episode, isCurrent, movieSlug, movieId, onClick, isChanging }) => {
@@ -2633,7 +3463,7 @@ export default function MovieDetail() {
     const [showAllEpisodes, setShowAllEpisodes] = useState(false);
     const [userClickedPlay, setUserClickedPlay] = useState(false);
 
-    // Load data với optimization
+    // ✅ FIX: Load data with better error handling
     useEffect(() => {
         let isMounted = true;
 
@@ -2664,19 +3494,21 @@ export default function MovieDetail() {
                     setMovie(movieData);
                     setLoading(false);
 
-                    // Load episodes với cache
+                    // ✅ FIX: Load episodes with safe localStorage
                     const cacheKey = `episodes_${movieData.id}`;
                     let episodesList = null;
                     
-                    try {
-                        const cached = localStorage.getItem(cacheKey);
-                        if (cached) {
+                    const cached = safeLocalStorage.getItem(cacheKey);
+                    if (cached) {
+                        try {
                             const parsed = JSON.parse(cached);
                             if (parsed?.data && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp) < 600000) {
                                 episodesList = parsed.data;
                             }
+                        } catch (e) {
+                            console.warn('Cache parse error:', e);
                         }
-                    } catch {}
+                    }
 
                     if (!episodesList) {
                         const episodesSnapshot = await getDocs(query(
@@ -2694,31 +3526,32 @@ export default function MovieDetail() {
                             videoUrl: doc.data().videoUrl
                         }));
 
-                        try {
-                            localStorage.setItem(cacheKey, JSON.stringify({ 
-                                data: episodesList, 
-                                timestamp: Date.now() 
-                            }));
-                        } catch {}
+                        safeLocalStorage.setItem(cacheKey, JSON.stringify({ 
+                            data: episodesList, 
+                            timestamp: Date.now() 
+                        }));
                     }
 
                     const ep = parseInt(searchParams.get('ep')) || 1;
                     const episode = episodesList.find(e => e.episodeNumber === ep) || episodesList[0];
                     setCurrentEpisode(episode);
 
-                    // Defer episodes render
-                    requestIdleCallback(() => {
+                    // ✅ FIX: Use setTimeout instead of requestIdleCallback (better mobile support)
+                    setTimeout(() => {
                         if (isMounted) {
                             setEpisodes(episodesList);
                             setLoadingEpisodes(false);
                         }
-                    }, { timeout: 500 });
+                    }, 100);
                 } else {
                     setLoading(false);
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
-                if (isMounted) setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                    setLoadingEpisodes(false);
+                }
             }
         };
 
@@ -2729,14 +3562,21 @@ export default function MovieDetail() {
         };
     }, [params.id, searchParams]);
 
-    // Lazy load suggested movies
+    // ✅ FIX: Lazy load suggested movies with better compatibility
     useEffect(() => {
         if (!movie) return;
+
+        // ✅ FIX: Check if IntersectionObserver is supported
+        if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+            // Fallback: just show after delay
+            setTimeout(() => setShowSuggested(true), 2000);
+            return;
+        }
 
         const observer = new IntersectionObserver(
             (entries) => {
                 if (entries[0].isIntersecting && !showSuggested) {
-                    requestIdleCallback(() => setShowSuggested(true), { timeout: 1000 });
+                    setTimeout(() => setShowSuggested(true), 500);
                 }
             },
             { rootMargin: '400px' }
@@ -2748,32 +3588,40 @@ export default function MovieDetail() {
         return () => observer.disconnect();
     }, [movie, showSuggested]);
 
-    // Update meta tags
+    // ✅ FIX: Update meta tags safely
     useEffect(() => {
-        if (!movie) return;
+        if (!movie || typeof document === 'undefined') return;
 
-        document.title = `${movie.title} - Xem phim ${movie.title} Vietsub HD | NiceAnime`;
+        try {
+            document.title = `${movie.title} - Xem phim ${movie.title} Vietsub HD | NiceAnime`;
 
-        const metas = [
-            ['name', 'description', movie.description 
-                ? `Xem phim ${movie.title} (${movie.year}) Vietsub HD. ${movie.description.substring(0, 150)}...`
-                : `Xem phim ${movie.title} (${movie.year}) Vietsub HD trên NiceAnime`],
-            ['property', 'og:title', movie.title],
-            ['property', 'og:image', movie.thumbnail],
-            ['property', 'og:type', 'video.movie']
-        ];
+            const metas = [
+                ['name', 'description', movie.description 
+                    ? `Xem phim ${movie.title} (${movie.year}) Vietsub HD. ${movie.description.substring(0, 150)}...`
+                    : `Xem phim ${movie.title} (${movie.year}) Vietsub HD trên NiceAnime`],
+                ['property', 'og:title', movie.title],
+                ['property', 'og:image', movie.thumbnail],
+                ['property', 'og:type', 'video.movie']
+            ];
 
-        requestIdleCallback(() => {
-            metas.forEach(([attr, value, content]) => {
-                const meta = document.querySelector(`meta[${attr}="${value}"]`);
-                if (meta) meta.setAttribute('content', content);
-            });
-        });
+            setTimeout(() => {
+                metas.forEach(([attr, value, content]) => {
+                    try {
+                        const meta = document.querySelector(`meta[${attr}="${value}"]`);
+                        if (meta) meta.setAttribute('content', content);
+                    } catch (e) {
+                        console.warn('Meta update error:', e);
+                    }
+                });
+            }, 0);
+        } catch (error) {
+            console.warn('Document update error:', error);
+        }
     }, [movie]);
 
-    // Preconnect to video domain
+    // ✅ FIX: Preconnect safely
     useEffect(() => {
-        if (!currentEpisode?.videoUrl) return;
+        if (!currentEpisode?.videoUrl || typeof document === 'undefined') return;
         
         try {
             const url = new URL(currentEpisode.videoUrl);
@@ -2787,7 +3635,9 @@ export default function MovieDetail() {
                     document.head.appendChild(link);
                 }
             });
-        } catch {}
+        } catch (e) {
+            console.warn('Preconnect error:', e);
+        }
     }, [currentEpisode?.videoUrl]);
 
     // Handle play button click
@@ -2796,7 +3646,7 @@ export default function MovieDetail() {
         setMountIframe(true);
     }, []);
 
-    // Handle episode change
+    // ✅ FIX: Handle episode change with better mobile support
     const handleEpisodeChange = useCallback((episode) => {
         if (isChangingEpisode || episode.id === currentEpisode?.id) return;
         
@@ -2806,8 +3656,20 @@ export default function MovieDetail() {
         setMountIframe(false);
         setUserClickedPlay(false);
         
-        router.push(`?ep=${episode.episodeNumber}`, { scroll: false });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        try {
+            router.push(`?ep=${episode.episodeNumber}`, { scroll: false });
+            
+            // ✅ FIX: Scroll with fallback
+            if (typeof window !== 'undefined') {
+                if ('scrollTo' in window) {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    window.scrollTo(0, 0);
+                }
+            }
+        } catch (error) {
+            console.warn('Navigation error:', error);
+        }
         
         setTimeout(() => setIsChangingEpisode(false), 200);
     }, [isChangingEpisode, currentEpisode?.id, router]);
@@ -2943,9 +3805,11 @@ export default function MovieDetail() {
                                         justifyContent: 'center',
                                         backgroundColor: 'rgba(0,0,0,0.7)',
                                         zIndex: 20,
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        WebkitTapHighlightColor: 'transparent'
                                     }}
-                                    onClick={handlePlayClick}>
+                                    onClick={handlePlayClick}
+                                    onTouchEnd={handlePlayClick}>
                                         <div style={{
                                             width: '80px',
                                             height: '80px',
@@ -2955,9 +3819,7 @@ export default function MovieDetail() {
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             transition: 'transform 0.2s'
-                                        }}
-                                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+                                        }}>
                                             <div style={{
                                                 width: 0,
                                                 height: 0,
@@ -2990,7 +3852,7 @@ export default function MovieDetail() {
                                     </div>
                                 )}
                                 
-                                {/* Iframe - only mount when user clicks play */}
+                                {/* ✅ FIX: Iframe with mobile-friendly attributes */}
                                 {mountIframe && (
                                     <iframe
                                         key={currentEpisode.episodeNumber}
@@ -3006,10 +3868,13 @@ export default function MovieDetail() {
                                             transition: 'opacity 0.3s'
                                         }}
                                         allowFullScreen
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        playsInline
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
                                         loading="lazy"
                                         title={`${movie.title} - Tập ${currentEpisode.episodeNumber}`}
                                         onLoad={() => setIframeLoaded(true)}
+                                        onError={(e) => console.error('Iframe load error:', e)}
                                     />
                                 )}
                             </div>
@@ -3042,8 +3907,7 @@ export default function MovieDetail() {
                         borderRadius: '0.75rem',
                         padding: '1.5rem',
                         marginBottom: '2rem',
-                        boxShadow: '0 10px 15px rgba(0,0,0,0.3)',
-                        contentVisibility: 'auto'
+                        boxShadow: '0 10px 15px rgba(0,0,0,0.3)'
                     }}>
                         <h2 style={{
                             fontSize: '1.5rem',
@@ -3060,7 +3924,8 @@ export default function MovieDetail() {
                             gap: '0.75rem',
                             maxHeight: '400px',
                             overflowY: 'auto',
-                            padding: '0.5rem'
+                            padding: '0.5rem',
+                            WebkitOverflowScrolling: 'touch'
                         }}>
                             {(showAllEpisodes ? episodes : episodes.slice(0, 50)).map((episode) => (
                                 <EpisodeButton
@@ -3087,7 +3952,8 @@ export default function MovieDetail() {
                                     border: 'none',
                                     cursor: 'pointer',
                                     marginTop: '1rem',
-                                    width: '100%'
+                                    width: '100%',
+                                    WebkitTapHighlightColor: 'transparent'
                                 }}
                             >
                                 {showAllEpisodes ? 'Thu gọn' : `Xem tất cả ${episodes.length} tập`}
@@ -3096,17 +3962,19 @@ export default function MovieDetail() {
                     </div>
                 )}
 
-                {/* Movie Info */}
+                {/* Movie Info - ✅ FIX: Responsive grid */}
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: '300px 1fr',
+                    gridTemplateColumns: window.innerWidth > 768 ? '300px 1fr' : '1fr',
                     gap: '2rem',
                     marginBottom: '3rem'
                 }}>
                     <div style={{
                         position: 'relative',
                         width: '100%',
-                        aspectRatio: '2 / 3'
+                        aspectRatio: '2 / 3',
+                        maxWidth: window.innerWidth > 768 ? '300px' : '100%',
+                        margin: window.innerWidth > 768 ? 0 : '0 auto'
                     }}>
                         <Image
                             src={movie.thumbnail}
@@ -3125,7 +3993,7 @@ export default function MovieDetail() {
 
                     <div>
                         <h1 style={{
-                            fontSize: '2.5rem',
+                            fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',
                             fontWeight: 'bold',
                             background: 'linear-gradient(to right, #60a5fa, #a78bfa)',
                             WebkitBackgroundClip: 'text',
