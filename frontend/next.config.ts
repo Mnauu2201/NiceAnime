@@ -25,7 +25,8 @@ const nextConfig: NextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
 
     // Cache ảnh 1 phút (đủ cho development, tăng lên production)
-    minimumCacheTTL: 60,
+    // minimumCacheTTL: 60,
+    minimumCacheTTL: 31536000,
 
     // Cho phép external patterns (backup nếu domains không đủ)
     remotePatterns: [
@@ -156,6 +157,10 @@ const nextConfig: NextConfig = {
           {
             key: 'Referrer-Policy',
             value: 'origin-when-cross-origin'
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'geolocation=(), microphone=(), camera=()'
           },
         ],
       },

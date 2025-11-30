@@ -217,7 +217,7 @@ export default function SuggestedMoviesSection({ movieId, movieCategory, movieCa
     if (movies.length === 0) return null;
 
     return (
-        <div style={{ marginBottom: '3rem' }}>
+        <div style={{ marginBottom: '3rem', contentVisibility: 'auto', containIntrinsicSize: '800px 600px' }}>
             <h2 style={{
                 fontSize: '1.75rem',
                 fontWeight: '700',

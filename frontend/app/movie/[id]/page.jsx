@@ -2568,16 +2568,16 @@
 // FILE: app/movie/[id]/page.jsx
 'use client';
 import Image from 'next/image';
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// Lazy load suggested movies - chỉ load khi cần
+// Lazy load suggested movies
 const SuggestedMoviesSection = dynamic(() => import('./SuggestedMoviesSection'), {
-    loading: () => <div style={{ minHeight: '400px' }} />,
+    loading: () => null,
     ssr: false
 });
 
@@ -2602,35 +2602,17 @@ const EpisodeButton = memo(({ episode, isCurrent, movieSlug, movieId, onClick, i
                 textDecoration: 'none',
                 fontWeight: isCurrent ? 'bold' : '600',
                 fontSize: '0.875rem',
-                transition: 'background-color 0.15s ease, transform 0.15s ease',
+                transition: 'background-color 0.15s ease',
                 border: isCurrent ? '2px solid #60a5fa' : '2px solid transparent',
                 cursor: isChanging ? 'wait' : 'pointer',
                 opacity: isChanging ? 0.6 : 1,
                 display: 'block',
                 pointerEvents: isChanging ? 'none' : 'auto'
             }}
-            onMouseEnter={(e) => {
-                if (!isCurrent && !isChanging) {
-                    e.currentTarget.style.backgroundColor = '#475569';
-                    e.currentTarget.style.transform = 'scale(1.05)';
-                }
-            }}
-            onMouseLeave={(e) => {
-                if (!isCurrent) {
-                    e.currentTarget.style.backgroundColor = '#334155';
-                    e.currentTarget.style.transform = 'scale(1)';
-                }
-            }}
             aria-label={`Xem tập ${episode.episodeNumber}`}
         >
             {episode.episodeNumber}
         </Link>
-    );
-}, (prevProps, nextProps) => {
-    return (
-        prevProps.episode.id === nextProps.episode.id &&
-        prevProps.isCurrent === nextProps.isCurrent &&
-        prevProps.isChanging === nextProps.isChanging
     );
 });
 EpisodeButton.displayName = 'EpisodeButton';
@@ -2647,11 +2629,13 @@ export default function MovieDetail() {
     const [isChangingEpisode, setIsChangingEpisode] = useState(false);
     const [iframeLoaded, setIframeLoaded] = useState(false);
     const [showSuggested, setShowSuggested] = useState(false);
+    const [mountIframe, setMountIframe] = useState(false);
+    const [showAllEpisodes, setShowAllEpisodes] = useState(false);
+    const [userClickedPlay, setUserClickedPlay] = useState(false);
 
     // Load data với optimization
     useEffect(() => {
         let isMounted = true;
-        const abortController = new AbortController();
 
         const loadData = async () => {
             try {
@@ -2674,34 +2658,61 @@ export default function MovieDetail() {
                     }
                 }
 
-                if (!isMounted || abortController.signal.aborted) return;
+                if (!isMounted) return;
 
                 if (movieData) {
                     setMovie(movieData);
                     setLoading(false);
 
-                    // Load episodes
-                    const episodesSnapshot = await getDocs(query(
-                        collection(db, 'episodes'),
-                        where('movieId', '==', movieData.id),
-                        orderBy('episodeNumber', 'asc')
-                    ));
+                    // Load episodes với cache
+                    const cacheKey = `episodes_${movieData.id}`;
+                    let episodesList = null;
+                    
+                    try {
+                        const cached = localStorage.getItem(cacheKey);
+                        if (cached) {
+                            const parsed = JSON.parse(cached);
+                            if (parsed?.data && Array.isArray(parsed.data) && (Date.now() - parsed.timestamp) < 600000) {
+                                episodesList = parsed.data;
+                            }
+                        }
+                    } catch {}
 
-                    if (!isMounted || abortController.signal.aborted) return;
+                    if (!episodesList) {
+                        const episodesSnapshot = await getDocs(query(
+                            collection(db, 'episodes'),
+                            where('movieId', '==', movieData.id),
+                            orderBy('episodeNumber', 'asc')
+                        ));
 
-                    const episodesList = episodesSnapshot.docs.map(doc => ({
-                        id: doc.id,
-                        episodeNumber: doc.data().episodeNumber,
-                        title: doc.data().title,
-                        videoUrl: doc.data().videoUrl
-                    }));
+                        if (!isMounted) return;
 
-                    setEpisodes(episodesList);
-                    setLoadingEpisodes(false);
+                        episodesList = episodesSnapshot.docs.map(doc => ({
+                            id: doc.id,
+                            episodeNumber: doc.data().episodeNumber,
+                            title: doc.data().title,
+                            videoUrl: doc.data().videoUrl
+                        }));
+
+                        try {
+                            localStorage.setItem(cacheKey, JSON.stringify({ 
+                                data: episodesList, 
+                                timestamp: Date.now() 
+                            }));
+                        } catch {}
+                    }
 
                     const ep = parseInt(searchParams.get('ep')) || 1;
-                    const episode = episodesList.find(e => e.episodeNumber === ep);
-                    setCurrentEpisode(episode || episodesList[0]);
+                    const episode = episodesList.find(e => e.episodeNumber === ep) || episodesList[0];
+                    setCurrentEpisode(episode);
+
+                    // Defer episodes render
+                    requestIdleCallback(() => {
+                        if (isMounted) {
+                            setEpisodes(episodesList);
+                            setLoadingEpisodes(false);
+                        }
+                    }, { timeout: 500 });
                 } else {
                     setLoading(false);
                 }
@@ -2715,21 +2726,20 @@ export default function MovieDetail() {
 
         return () => {
             isMounted = false;
-            abortController.abort();
         };
     }, [params.id, searchParams]);
 
-    // Lazy load suggested movies với Intersection Observer
+    // Lazy load suggested movies
     useEffect(() => {
         if (!movie) return;
 
         const observer = new IntersectionObserver(
             (entries) => {
                 if (entries[0].isIntersecting && !showSuggested) {
-                    setShowSuggested(true);
+                    requestIdleCallback(() => setShowSuggested(true), { timeout: 1000 });
                 }
             },
-            { rootMargin: '300px' }
+            { rootMargin: '400px' }
         );
 
         const target = document.getElementById('suggested-trigger');
@@ -2738,13 +2748,12 @@ export default function MovieDetail() {
         return () => observer.disconnect();
     }, [movie, showSuggested]);
 
-    // Update meta tags - chỉ những gì cần thiết
+    // Update meta tags
     useEffect(() => {
         if (!movie) return;
 
         document.title = `${movie.title} - Xem phim ${movie.title} Vietsub HD | NiceAnime`;
 
-        // Batch update meta tags
         const metas = [
             ['name', 'description', movie.description 
                 ? `Xem phim ${movie.title} (${movie.year}) Vietsub HD. ${movie.description.substring(0, 150)}...`
@@ -2754,13 +2763,38 @@ export default function MovieDetail() {
             ['property', 'og:type', 'video.movie']
         ];
 
-        metas.forEach(([attr, value, content]) => {
-            let meta = document.querySelector(`meta[${attr}="${value}"]`);
-            if (meta) {
-                meta.setAttribute('content', content);
-            }
+        requestIdleCallback(() => {
+            metas.forEach(([attr, value, content]) => {
+                const meta = document.querySelector(`meta[${attr}="${value}"]`);
+                if (meta) meta.setAttribute('content', content);
+            });
         });
     }, [movie]);
+
+    // Preconnect to video domain
+    useEffect(() => {
+        if (!currentEpisode?.videoUrl) return;
+        
+        try {
+            const url = new URL(currentEpisode.videoUrl);
+            const origin = `${url.protocol}//${url.host}`;
+            
+            ['preconnect', 'dns-prefetch'].forEach(rel => {
+                if (!document.querySelector(`link[rel="${rel}"][href="${origin}"]`)) {
+                    const link = document.createElement('link');
+                    link.rel = rel;
+                    link.href = origin;
+                    document.head.appendChild(link);
+                }
+            });
+        } catch {}
+    }, [currentEpisode?.videoUrl]);
+
+    // Handle play button click
+    const handlePlayClick = useCallback(() => {
+        setUserClickedPlay(true);
+        setMountIframe(true);
+    }, []);
 
     // Handle episode change
     const handleEpisodeChange = useCallback((episode) => {
@@ -2769,21 +2803,25 @@ export default function MovieDetail() {
         setIsChangingEpisode(true);
         setIframeLoaded(false);
         setCurrentEpisode(episode);
+        setMountIframe(false);
+        setUserClickedPlay(false);
         
         router.push(`?ep=${episode.episodeNumber}`, { scroll: false });
         window.scrollTo({ top: 0, behavior: 'smooth' });
         
-        setTimeout(() => setIsChangingEpisode(false), 300);
+        setTimeout(() => setIsChangingEpisode(false), 200);
     }, [isChangingEpisode, currentEpisode?.id, router]);
 
-    // Category display
-    const movieCategoryDisplay = movie?.category
-        ? (Array.isArray(movie.category) ? movie.category.join(', ') : movie.category)
-        : '';
+    // Category data
+    const categoryArray = useMemo(() => {
+        const cat = movie?.category;
+        if (!cat) return [];
+        return Array.isArray(cat) ? cat : cat.split(',').map(c => c.trim()).filter(Boolean);
+    }, [movie?.category]);
 
-    const categoryArray = movie?.category
-        ? (Array.isArray(movie.category) ? movie.category : movie.category.split(',').map(c => c.trim()).filter(c => c))
-        : [];
+    const movieCategoryDisplay = useMemo(() => 
+        categoryArray.length ? categoryArray.join(', ') : '', 
+    [categoryArray]);
 
     if (loading) {
         return (
@@ -2845,8 +2883,7 @@ export default function MovieDetail() {
                 background: 'linear-gradient(-90deg, rgba(5,6,11,0.95) 0%, rgba(59,7,100,0.95) 60%, rgba(190,24,93,0.95) 100%)',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 backdropFilter: 'blur(10px)',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
-                willChange: 'transform'
+                boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
             }}>
                 <div style={{
                     maxWidth: '1300px',
@@ -2893,7 +2930,48 @@ export default function MovieDetail() {
                                 overflow: 'hidden',
                                 backgroundColor: '#000'
                             }}>
-                                {!iframeLoaded && (
+                                {/* Play Button Overlay */}
+                                {!userClickedPlay && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        backgroundColor: 'rgba(0,0,0,0.7)',
+                                        zIndex: 20,
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={handlePlayClick}>
+                                        <div style={{
+                                            width: '80px',
+                                            height: '80px',
+                                            borderRadius: '50%',
+                                            backgroundColor: '#3b82f6',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            transition: 'transform 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+                                            <div style={{
+                                                width: 0,
+                                                height: 0,
+                                                borderLeft: '25px solid white',
+                                                borderTop: '15px solid transparent',
+                                                borderBottom: '15px solid transparent',
+                                                marginLeft: '5px'
+                                            }}></div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Loading Spinner */}
+                                {mountIframe && !iframeLoaded && (
                                     <div style={{
                                         position: 'absolute',
                                         top: '50%',
@@ -2912,25 +2990,28 @@ export default function MovieDetail() {
                                     </div>
                                 )}
                                 
-                                <iframe
-                                    key={currentEpisode.episodeNumber}
-                                    src={currentEpisode.videoUrl}
-                                    style={{
-                                        position: 'absolute',
-                                        top: 0,
-                                        left: 0,
-                                        width: '100%',
-                                        height: '100%',
-                                        border: 'none',
-                                        opacity: iframeLoaded ? 1 : 0,
-                                        transition: 'opacity 0.3s'
-                                    }}
-                                    allowFullScreen
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                    loading="eager"
-                                    title={`${movie.title} - Tập ${currentEpisode.episodeNumber}`}
-                                    onLoad={() => setIframeLoaded(true)}
-                                />
+                                {/* Iframe - only mount when user clicks play */}
+                                {mountIframe && (
+                                    <iframe
+                                        key={currentEpisode.episodeNumber}
+                                        src={currentEpisode.videoUrl}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            border: 'none',
+                                            opacity: iframeLoaded ? 1 : 0,
+                                            transition: 'opacity 0.3s'
+                                        }}
+                                        allowFullScreen
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        loading="lazy"
+                                        title={`${movie.title} - Tập ${currentEpisode.episodeNumber}`}
+                                        onLoad={() => setIframeLoaded(true)}
+                                    />
+                                )}
                             </div>
 
                             <div style={{
@@ -2940,7 +3021,7 @@ export default function MovieDetail() {
                                 <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0 0 0.5rem 0' }}>
                                     {currentEpisode.title}
                                 </h1>
-                                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.875rem', color: '#cbd5e1' }}>
+                                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.875rem', color: '#cbd5e1', flexWrap: 'wrap' }}>
                                     <span>📅 {movie.year}</span>
                                     <span>🎭 {movieCategoryDisplay}</span>
                                     <span>📺 Tập {currentEpisode.episodeNumber}/{movie.totalEpisodes}</span>
@@ -2961,7 +3042,8 @@ export default function MovieDetail() {
                         borderRadius: '0.75rem',
                         padding: '1.5rem',
                         marginBottom: '2rem',
-                        boxShadow: '0 10px 15px rgba(0,0,0,0.3)'
+                        boxShadow: '0 10px 15px rgba(0,0,0,0.3)',
+                        contentVisibility: 'auto'
                     }}>
                         <h2 style={{
                             fontSize: '1.5rem',
@@ -2980,7 +3062,7 @@ export default function MovieDetail() {
                             overflowY: 'auto',
                             padding: '0.5rem'
                         }}>
-                            {episodes.map((episode) => (
+                            {(showAllEpisodes ? episodes : episodes.slice(0, 50)).map((episode) => (
                                 <EpisodeButton
                                     key={episode.id}
                                     episode={episode}
@@ -2992,6 +3074,25 @@ export default function MovieDetail() {
                                 />
                             ))}
                         </div>
+                        
+                        {episodes.length > 50 && (
+                            <button
+                                onClick={() => setShowAllEpisodes(v => !v)}
+                                style={{
+                                    backgroundColor: '#3b82f6',
+                                    color: 'white',
+                                    padding: '0.5rem 1.5rem',
+                                    borderRadius: '0.5rem',
+                                    fontWeight: 600,
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    marginTop: '1rem',
+                                    width: '100%'
+                                }}
+                            >
+                                {showAllEpisodes ? 'Thu gọn' : `Xem tất cả ${episodes.length} tập`}
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -3002,7 +3103,11 @@ export default function MovieDetail() {
                     gap: '2rem',
                     marginBottom: '3rem'
                 }}>
-                    <div style={{ position: 'relative', width: '100%', aspectRatio: '2 / 3' }}>
+                    <div style={{
+                        position: 'relative',
+                        width: '100%',
+                        aspectRatio: '2 / 3'
+                    }}>
                         <Image
                             src={movie.thumbnail}
                             alt={`${movie.title} poster`}
@@ -3013,8 +3118,8 @@ export default function MovieDetail() {
                                 borderRadius: '0.75rem',
                                 boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)'
                             }}
-                            priority
-                            quality={90}
+                            loading="lazy"
+                            quality={75}
                         />
                     </div>
 
@@ -3078,10 +3183,10 @@ export default function MovieDetail() {
                     </div>
                 </div>
 
-                {/* Trigger cho lazy loading */}
+                {/* Trigger */}
                 <div id="suggested-trigger" style={{ height: '1px' }}></div>
 
-                {/* Lazy loaded Suggested Movies */}
+                {/* Suggested Movies */}
                 {showSuggested && (
                     <SuggestedMoviesSection 
                         movieId={movie.id}
