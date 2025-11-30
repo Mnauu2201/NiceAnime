@@ -57,6 +57,16 @@ const Player = dynamic(() => import('../../../../../components/EmbedPlayer'), {
         </div>
     ),
 });
+
+const SuggestedMovies = dynamic(() => import('@/app/movie/[id]/SuggestedMoviesSection'), {
+    ssr: false, // <-- Ngăn SSR cho component này
+    loading: () => (
+        <div style={{ margin: '3rem 0', textAlign: 'center', color: '#64748b' }}>
+            Đang tải phần đề xuất...
+        </div>
+    )
+});
+
 // -------------------------------------------------------------
 
 
@@ -411,16 +421,26 @@ export default function MovieDetail() {
                     </div>
                 </div>
 
-                {/* Trigger */}<div id="suggested-trigger" style={{ height: '1px', marginTop: '3rem' }}></div>
+                {/* Trigger */}
+                <div id="suggested-trigger" style={{ height: '1px', marginTop: '3rem' }}></div>
 
-                {/* Suggested Movies (Nếu cần) */}
+                {/* Suggested Movies (Sử dụng tên mới: SuggestedMovies) */}
                 {showSuggested && movie && (
-                    <SuggestedMoviesSection
+                    <SuggestedMovies // <-- Dùng component đã được Dynamic Import
                         movieId={movie.id}
                         movieCategory={movie.category}
                         movieCategoryDisplay={movieCategoryDisplay}
                     />
                 )}
+
+                {/* Suggested Movies (Nếu cần) */}
+                {/* {showSuggested && movie && (
+                    <SuggestedMoviesSection
+                        movieId={movie.id}
+                        movieCategory={movie.category}
+                        movieCategoryDisplay={movieCategoryDisplay}
+                    />
+                )} */}
             </main>
 
             <footer style={{
