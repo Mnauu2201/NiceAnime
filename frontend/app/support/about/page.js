@@ -39,7 +39,7 @@ export default function AboutPage() {
                         Tôi sẽ cố gắng cập nhật thật nhiều phim nhất có thể. Thắc mắc hay cần khiếu nại gì xin hãy gửi email tới địa chỉ bên trên
                         hoặc truy cập Social có để bên dưới.
                         <br /><br />
-                        Đang xây dựng website xem phim tại <b><Link href="https://niceanime.net" target="_blank" className="text-blue-500 hover:underline">NiceAnime</Link></b>
+                        Đang xây dựng website xem phim tại <b><Link href="https://niceanime.vercel.app" target="_blank" className="text-blue-500 hover:underline">NiceAnime</Link></b>
                     </p>
 
                     {/* Các icon mạng xã hội/công việc */}

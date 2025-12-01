@@ -11,7 +11,7 @@ export default function TermsOfServicePage() {
 
             <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#60a5fa', marginTop: '1rem', marginBottom: '0.75rem' }}>2. Nội dung</h2>
             <p style={{ color: '#cbd5e1', marginBottom: '1rem' }}>
-                Tất cả nội dung trên NiceAnime chỉ dành cho mục đích giải trí và cá nhân. Chúng tôi không chịu trách nhiệm về tính chính xác, bản quyền, hoặc tính hợp pháp của nội dung được nhúng (embed) từ bên thứ ba.
+                Tất cả nội dung trên NiceAnime chỉ dành cho mục đích giải trí và cá nhân. Chúng tôi không chịu trách nhiệm về tính chính xác, bản quyền, hoặc tính hợp pháp của nội dung.
             </p>
 
             <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#60a5fa', marginTop: '1rem', marginBottom: '0.75rem' }}>3. Hành vi bị cấm</h2>
