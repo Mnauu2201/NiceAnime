@@ -25,8 +25,8 @@ export const metadata: Metadata = {
     "Xem phim Anime Vietsub, phim hoạt hình online chất lượng cao, cập nhật liên tục mỗi ngày. Kho phim không quảng cáo, tốc độ load nhanh, độ nét full HD.",
   // 3. Icons (Favicon) - Đã có sẵn trong code của bạn
   icons: {
-    icon: "/favicon-32x32.png",
-    shortcut: "/favicon-32x32.png",
+    icon: "/faviconNiceAnimee2.png",
+    shortcut: "/faviconNiceAnimee2.png",
     apple: "/NiceAnime.png",
   },
   // 4. Open Graph (Cho Facebook, Zalo) - QUAN TRỌNG
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "NiceAnime - Xem Anime Vietsub Full HD Mới Nhất",
-    description: "Kho phim không quảng cáo, tốc độ load nhanh, độ nét full HD.",
+    description: "Kho phim có tốc độ load nhanh, độ nét full HD.",
     // image: '/NiceAnime-header.png', // Tương tự ảnh OG
   },
 };
