@@ -18,45 +18,27 @@ export default function AdminDashboard() {
     const router = useRouter();
     const [searchTerm, setSearchTerm] = useState('');
 
-    // ** [START] THÊM MỚI (1/8): State điều khiển Dropdown Category **
-    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
-    const dropdownRef = useRef(null); // Ref cho Custom Dropdown
-    // ** [END] THÊM MỚI **
+    // ** MỚI: State cho phân trang **
+    const [currentPage, setCurrentPage] = useState(1);
+    const MOVIES_PER_PAGE = 20;
 
-    // ** [START] THÊM MỚI (2/8): Định nghĩa danh sách Thể loại **
+    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
     const CATEGORIES = [
-        "Anime",
-        "Hành Động",
-        "Phiêu Lưu",
-        "Hài",
-        "Hoạt Hình",
-        "Giả Tưởng",
-        "Kinh Dị",
-        "Khoa Học Viễn Tưởng",
-        "Tâm Lý",
-        "Tình Cảm",
-        "Gay Cấn",
-        "Bí Ẩn",
-        "Lãng Mạn",
-        "Tài Liệu",
-        "Hình Sự",
-        "Gia Đình",
-        "Chính Kịch",
-        "Lịch Sử",
-        "Chiến Tranh"
+        "Anime", "Hành Động", "Phiêu Lưu", "Hài", "Hoạt Hình", "Giả Tưởng",
+        "Kinh Dị", "Khoa Học Viễn Tưởng", "Tâm Lý", "Tình Cảm", "Gay Cấn",
+        "Bí Ẩn", "Lãng Mạn", "Tài Liệu", "Hình Sự", "Gia Đình",
+        "Chính Kịch", "Lịch Sử", "Chiến Tranh"
     ];
-    // ** [END] THÊM MỚI **
 
     const [formData, setFormData] = useState({
         title: '',
         thumbnail: '',
-        // Category là MẢNG để lưu nhiều giá trị
         category: ['Anime'],
         year: new Date().getFullYear(),
         description: '',
-        // ** [START] THAY ĐỔI: Thêm trường format (Phim lẻ/Phim bộ) **
-        format: 'Phim lẻ', // Mặc định là Phim lẻ
-        // ** [END] THAY ĐỔI **
+        format: 'Phim lẻ',
         totalEpisodes: 1
     });
 
@@ -69,12 +51,9 @@ export default function AdminDashboard() {
             const querySnapshot = await getDocs(collection(db, 'movies'));
             const moviesList = querySnapshot.docs.map(doc => ({
                 id: doc.id,
-                // ** [START] THAY ĐỔI (3/8): Đảm bảo category là mảng khi load (phòng trường hợp cũ là string) **
                 ...doc.data(),
                 category: Array.isArray(doc.data().category) ? doc.data().category : [doc.data().category].filter(Boolean),
-                // Đảm bảo format có giá trị mặc định nếu không có trong DB
                 format: doc.data().format || 'Phim lẻ'
-                // ** [END] THAY ĐỔI **
             }));
             setMovies(moviesList);
         } catch (error) {
@@ -95,7 +74,6 @@ export default function AdminDashboard() {
         return () => unsubscribe();
     }, [router]);
 
-    // ** [START] THÊM MỚI (4/8): Xử lý đóng Dropdown khi click ra ngoài **
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -106,7 +84,6 @@ export default function AdminDashboard() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [dropdownRef]);
-    // ** [END] THÊM MỚI **
 
     const showNotification = (message, type = 'success') => {
         if (notificationTimer.current) {
@@ -158,17 +135,14 @@ export default function AdminDashboard() {
         setEpisodes(newEpisodes);
     };
 
-    // ** [START] THAY ĐỔI (5/8): Hàm xử lý Checkbox (Thêm/Xóa phần tử khỏi mảng) **
     const handleCategoryChange = (value, isChecked) => {
         setFormData((prevFormData) => {
             if (isChecked) {
-                // Thêm thể loại nếu được tích chọn
                 return {
                     ...prevFormData,
                     category: [...prevFormData.category, value],
                 };
             } else {
-                // Xóa thể loại nếu bỏ tích chọn
                 return {
                     ...prevFormData,
                     category: prevFormData.category.filter((cat) => cat !== value),
@@ -176,7 +150,6 @@ export default function AdminDashboard() {
             }
         });
     };
-    // ** [END] THAY ĐỔI **
 
     const handleAddMovie = async (e) => {
         e.preventDefault();
@@ -187,35 +160,29 @@ export default function AdminDashboard() {
             return;
         }
 
-        // ** [START] THAY ĐỔI (6/8): Kiểm tra chọn ít nhất 1 thể loại **
         if (!Array.isArray(formData.category) || formData.category.length === 0) {
             showNotification('Vui lòng chọn ít nhất một thể loại!', 'error');
             return;
         }
-        // ** [END] THAY ĐỔI **
 
         setUploading(true);
 
         try {
-            // BƯỚC 1: Tạo document trong collection "movies"
             const slug = slugify(formData.title);
             const movieRef = await addDoc(collection(db, 'movies'), {
                 title: formData.title,
-                slug: slug, // Thêm slug để dùng trong URL
+                slug: slug,
                 thumbnail: formData.thumbnail,
-                category: formData.category, // Dữ liệu category đã là mảng
+                category: formData.category,
                 year: formData.year,
                 description: formData.description,
-                // ** [START] THÊM MỚI: Lưu định dạng phim **
-                format: formData.format, // Lưu định dạng phim (Phim lẻ/Phim bộ)
-                // ** [END] THÊM MỚI **
+                format: formData.format,
                 totalEpisodes: formData.totalEpisodes,
                 createdAt: new Date()
             });
 
             console.log('Movie created with ID:', movieRef.id);
 
-            // BƯỚC 2: Tạo documents trong collection "episodes"
             const batch = writeBatch(db);
             const episodesRef = collection(db, 'episodes');
 
@@ -235,18 +202,15 @@ export default function AdminDashboard() {
             console.log(`Created ${episodes.length} episodes for movie ${movieRef.id}`);
             showNotification(`Thêm phim "${formData.title}" với ${formData.totalEpisodes} tập thành công!`, 'success');
 
-            // Reset form
-            // ** [START] THAY ĐỔI (7/8): Reset category và format về mặc định **
             setFormData({
                 title: '',
                 thumbnail: '',
-                category: ['Anime'], // Reset về mảng
+                category: ['Anime'],
                 year: new Date().getFullYear(),
                 description: '',
-                format: 'Phim lẻ', // Reset format về mặc định
+                format: 'Phim lẻ',
                 totalEpisodes: 1
             });
-            // ** [END] THAY ĐỔI **
             setEpisodes([{ episodeNumber: 1, title: 'Tập 1', videoUrl: '' }]);
 
             loadMovies();
@@ -260,7 +224,6 @@ export default function AdminDashboard() {
 
     const handleDeleteMovie = async (movieId, movieTitle) => {
         try {
-            // Xóa tất cả episodes của phim
             const episodesQuery = query(collection(db, 'episodes'), where('movieId', '==', movieId));
             const episodesSnapshot = await getDocs(episodesQuery);
 
@@ -270,7 +233,6 @@ export default function AdminDashboard() {
                 batch.delete(docSnapshot.ref);
             });
 
-            // Xóa movie document
             batch.delete(doc(db, 'movies', movieId));
 
             await batch.commit();
@@ -317,26 +279,23 @@ export default function AdminDashboard() {
     };
 
     const goToMovieDetail = (movieId) => {
-        // Lưu vị trí scroll hiện tại
         sessionStorage.setItem('adminDashboardScroll', window.scrollY.toString());
         router.push(`/admin/movie/${movieId}`);
     };
 
-    // Khôi phục vị trí scroll khi quay lại
     useEffect(() => {
         const returningFromEdit = sessionStorage.getItem('returningFromEdit');
         const savedScroll = sessionStorage.getItem('adminDashboardScroll');
 
         if (returningFromEdit && savedScroll) {
-            // Delay để đảm bảo DOM đã render hoàn toàn
             setTimeout(() => {
                 window.scrollTo({
                     top: parseInt(savedScroll, 10),
-                    behavior: 'instant' // Scroll ngay lập tức, không smooth
+                    behavior: 'instant'
                 });
                 sessionStorage.removeItem('adminDashboardScroll');
                 sessionStorage.removeItem('returningFromEdit');
-            }, 300); // Tăng delay lên 300ms để chắc chắn
+            }, 300);
         }
     }, [movies, loading]);
 
@@ -345,13 +304,190 @@ export default function AdminDashboard() {
         movie.title?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    if (loading) {
-        return <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <p>Loading...</p>
-        </div>;
-    }
+    // ** MỚI: Tính toán phân trang **
+    const totalPages = Math.ceil(filteredMovies.length / MOVIES_PER_PAGE);
+    const startIndex = (currentPage - 1) * MOVIES_PER_PAGE;
+    const endIndex = startIndex + MOVIES_PER_PAGE;
+    const currentMovies = filteredMovies.slice(startIndex, endIndex);
 
-    // ** [START] THÊM MỚI (8/8): Hàm hiển thị category đã chọn trong ô input **
+    // ** MỚI: Reset về trang 1 khi search **
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
+    // ** MỚI: Hàm chuyển trang **
+    const goToPage = (page) => {
+        setCurrentPage(page);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // ** MỚI: Component Pagination **
+    const PaginationControls = () => {
+        if (totalPages <= 1) return null;
+
+        const pageNumbers = [];
+        const maxVisiblePages = 5;
+
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        if (endPage - startPage < maxVisiblePages - 1) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            pageNumbers.push(i);
+        }
+
+        return (
+            <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginTop: '2rem',
+                flexWrap: 'wrap'
+            }}>
+                {/* First Page */}
+                <button
+                    onClick={() => goToPage(1)}
+                    disabled={currentPage === 1}
+                    style={{
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        backgroundColor: currentPage === 1 ? '#4b5563' : '#374151',
+                        color: currentPage === 1 ? '#9ca3af' : 'white',
+                        cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold'
+                    }}
+                >
+                    ««
+                </button>
+
+                {/* Previous Page */}
+                <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    style={{
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        backgroundColor: currentPage === 1 ? '#4b5563' : '#374151',
+                        color: currentPage === 1 ? '#9ca3af' : 'white',
+                        cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold'
+                    }}
+                >
+                    «
+                </button>
+
+                {/* Page Numbers */}
+                {startPage > 1 && (
+                    <>
+                        <button
+                            onClick={() => goToPage(1)}
+                            style={{
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: '0.375rem',
+                                border: 'none',
+                                backgroundColor: '#374151',
+                                color: 'white',
+                                cursor: 'pointer',
+                                minWidth: '2.5rem'
+                            }}
+                        >
+                            1
+                        </button>
+                        {startPage > 2 && <span style={{ color: '#9ca3af' }}>...</span>}
+                    </>
+                )}
+
+                {pageNumbers.map((page) => (
+                    <button
+                        key={page}
+                        onClick={() => goToPage(page)}
+                        style={{
+                            padding: '0.5rem 0.75rem',
+                            borderRadius: '0.375rem',
+                            border: 'none',
+                            backgroundColor: currentPage === page ? '#3b82f6' : '#374151',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: currentPage === page ? 'bold' : 'normal',
+                            minWidth: '2.5rem'
+                        }}
+                    >
+                        {page}
+                    </button>
+                ))}
+
+                {endPage < totalPages && (
+                    <>
+                        {endPage < totalPages - 1 && <span style={{ color: '#9ca3af' }}>...</span>}
+                        <button
+                            onClick={() => goToPage(totalPages)}
+                            style={{
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: '0.375rem',
+                                border: 'none',
+                                backgroundColor: '#374151',
+                                color: 'white',
+                                cursor: 'pointer',
+                                minWidth: '2.5rem'
+                            }}
+                        >
+                            {totalPages}
+                        </button>
+                    </>
+                )}
+
+                {/* Next Page */}
+                <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    style={{
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        backgroundColor: currentPage === totalPages ? '#4b5563' : '#374151',
+                        color: currentPage === totalPages ? '#9ca3af' : 'white',
+                        cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold'
+                    }}
+                >
+                    »
+                </button>
+
+                {/* Last Page */}
+                <button
+                    onClick={() => goToPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    style={{
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        backgroundColor: currentPage === totalPages ? '#4b5563' : '#374151',
+                        color: currentPage === totalPages ? '#9ca3af' : 'white',
+                        cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold'
+                    }}
+                >
+                    »»
+                </button>
+
+                {/* Page Info */}
+                <span style={{
+                    color: '#9ca3af',
+                    fontSize: '0.875rem',
+                    marginLeft: '1rem'
+                }}>
+                    Trang {currentPage} / {totalPages}
+                </span>
+            </div>
+        );
+    };
+
     const getCategoryDisplay = () => {
         if (!Array.isArray(formData.category) || formData.category.length === 0) {
             return "Chọn thể loại...";
@@ -361,8 +497,12 @@ export default function AdminDashboard() {
         }
         return `${formData.category.length} thể loại đã chọn`;
     };
-    // ** [END] THÊM MỚI **
 
+    if (loading) {
+        return <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <p>Loading...</p>
+        </div>;
+    }
 
     return (
         <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', padding: '2rem', position: 'relative' }}>
@@ -408,7 +548,7 @@ export default function AdminDashboard() {
                         boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
                     }}>
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>{confirmModal.title}</h3>
-                        <p style={{ color: '#cbd5f5', marginBottom: '1.5rem', lineHeight: 1.5 }}>{confirmModal.message}</p>
+                        <p style={{ color: '#cbd5e1', marginBottom: '1.5rem', lineHeight: 1.5 }}>{confirmModal.message}</p>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                             <button
                                 onClick={closeConfirmModal}
@@ -476,12 +616,11 @@ export default function AdminDashboard() {
                     </p>
                 </div>
 
-                {/* Add Movie Form */}
+                {/* Add Movie Form - Giữ nguyên form thêm phim */}
                 <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem', marginBottom: '2rem' }}>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>➕ Thêm Phim Mới</h2>
 
                     <form onSubmit={handleAddMovie}>
-                        {/* Basic Info */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên phim *</label>
@@ -510,14 +649,9 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* ** [START] THAY ĐỔI: Điều chỉnh layout thành 4 cột để thêm Định dạng phim ** */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-
-                            {/* 1. Category Dropdown */}
                             <div ref={dropdownRef} style={{ position: 'relative' }}>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thể loại (Có thể chọn nhiều) *</label>
-
-                                {/* Input/Display Field */}
                                 <div
                                     onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
                                     style={{
@@ -542,7 +676,6 @@ export default function AdminDashboard() {
                                     </span>
                                 </div>
 
-                                {/* Dropdown Menu */}
                                 {isCategoryDropdownOpen && (
                                     <div style={{
                                         position: 'absolute',
@@ -559,7 +692,7 @@ export default function AdminDashboard() {
                                         overflowY: 'auto',
                                         padding: '0.5rem',
                                         display: 'grid',
-                                        gridTemplateColumns: 'repeat(2, 1fr)', // Chia 2 cột cho gọn
+                                        gridTemplateColumns: 'repeat(2, 1fr)',
                                         gap: '0.5rem'
                                     }}>
                                         {CATEGORIES.map((cat) => (
@@ -577,7 +710,6 @@ export default function AdminDashboard() {
                                                     transition: 'background-color 0.1s',
                                                 }}
                                             >
-                                                {/* Dấu tích V */}
                                                 <span style={{
                                                     marginRight: '0.5rem',
                                                     color: 'white',
@@ -591,9 +723,7 @@ export default function AdminDashboard() {
                                     </div>
                                 )}
                             </div>
-                            {/* ** [END] THAY ĐỔI: Custom Dropdown chọn nhiều Thể loại ** */}
 
-                            {/* 2. Format Selector (THÊM MỚI) */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Định dạng phim *</label>
                                 <select
@@ -608,7 +738,6 @@ export default function AdminDashboard() {
                                 </select>
                             </div>
 
-                            {/* 3. Năm Input */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Năm</label>
                                 <input
@@ -620,7 +749,6 @@ export default function AdminDashboard() {
                                 />
                             </div>
 
-                            {/* 4. Total Episodes Input */}
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tổng số tập *</label>
                                 <input
@@ -635,7 +763,6 @@ export default function AdminDashboard() {
                                 />
                             </div>
                         </div>
-                        {/* ** [END] THAY ĐỔI ** */}
 
                         <div style={{ marginBottom: '1rem' }}>
                             <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Mô tả</label>
@@ -649,7 +776,6 @@ export default function AdminDashboard() {
                             />
                         </div>
 
-                        {/* Episodes Input */}
                         <div style={{
                             backgroundColor: '#374151',
                             padding: '1rem',
@@ -736,11 +862,11 @@ export default function AdminDashboard() {
                     </form>
                 </div>
 
-                {/* Movies List */}
+                {/* Movies List with Pagination */}
                 <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                         <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
-                            📝 Danh Sách Phim ({searchTerm ? filteredMovies.length : movies.length})
+                            📋 Danh Sách Phim ({filteredMovies.length} phim)
                         </h2>
                         <div style={{
                             display: 'flex',
@@ -785,8 +911,28 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
+                    {/* ** MỚI: Hiển thị thông tin phân trang ** */}
+                    {filteredMovies.length > 0 && (
+                        <div style={{
+                            backgroundColor: '#374151',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '0.375rem',
+                            marginBottom: '1rem',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <span style={{ color: '#d1d5db', fontSize: '0.875rem' }}>
+                                Hiển thị {startIndex + 1} - {Math.min(endIndex, filteredMovies.length)} của {filteredMovies.length} phim
+                            </span>
+                            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                                Trang {currentPage} / {totalPages}
+                            </span>
+                        </div>
+                    )}
+
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {filteredMovies.length === 0 && searchTerm ? (
+                        {currentMovies.length === 0 && searchTerm ? (
                             <div style={{
                                 textAlign: 'center',
                                 padding: '3rem 2rem',
@@ -798,7 +944,7 @@ export default function AdminDashboard() {
                                 <p style={{ fontSize: '0.875rem' }}>Thử tìm kiếm với từ khóa khác.</p>
                             </div>
                         ) : (
-                            filteredMovies.map(movie => (
+                            currentMovies.map(movie => (
                                 <div key={movie.id} style={{
                                     backgroundColor: '#374151',
                                     padding: '1rem',
@@ -836,10 +982,8 @@ export default function AdminDashboard() {
                                         <div>
                                             <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>{movie.title}</h3>
                                             <p style={{ color: '#9ca3af', marginBottom: '0.25rem' }}>
-                                                {/* ** [START] THÊM MỚI: Hiển thị định dạng phim ** */}
                                                 <strong>Định dạng:</strong> {movie.format || 'N/A'} •
-                                                {/* ** [END] THÊM MỚI ** */}
-                                                <strong>Thể loại:</strong> {Array.isArray(movie.category) ? movie.category.join(', ') : movie.category} • {movie.year} • {movie.totalEpisodes} tập
+                                                <strong> Thể loại:</strong> {Array.isArray(movie.category) ? movie.category.join(', ') : movie.category} • {movie.year} • {movie.totalEpisodes} tập
                                             </p>
                                             <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem', lineHeight: '1.4' }}>
                                                 {movie.description?.substring(0, 150)}...
@@ -885,7 +1029,8 @@ export default function AdminDashboard() {
                                         </button>
                                     </div>
                                 </div>
-                            )))}
+                            ))
+                        )}
 
                         {movies.length === 0 && (
                             <p style={{ color: '#9ca3af', textAlign: 'center', padding: '2rem' }}>
@@ -893,60 +1038,13 @@ export default function AdminDashboard() {
                             </p>
                         )}
                     </div>
+
+                    {/* ** MỚI: Hiển thị Pagination Controls ** */}
+                    <PaginationControls />
                 </div>
             </div>
 
             {/* Scroll to Top Button */}
-            {/* <button
-                onClick={() => {
-                    let animationFrameId = null;
-                    const scrollToTop = () => {
-                        const currentPosition = window.pageYOffset;
-                        if (currentPosition > 10) {
-                            window.scrollTo(0, currentPosition - Math.max(currentPosition / 8, 10));
-                            animationFrameId = requestAnimationFrame(scrollToTop);
-                        } else {
-                            window.scrollTo(0, 0);
-                            if (animationFrameId) {
-                                cancelAnimationFrame(animationFrameId);
-                            }
-                        }
-                    };
-                    scrollToTop();
-                }}
-                style={{
-                    position: 'fixed',
-                    bottom: '2rem',
-                    right: '2rem',
-                    backgroundColor: '#3b82f6',
-                    color: 'white',
-                    width: '3.5rem',
-                    height: '3.5rem',
-                    borderRadius: '50%',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '1.5rem',
-                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
-                    transition: 'all 0.3s',
-                    zIndex: 50,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#2563eb';
-                    e.currentTarget.style.transform = 'translateY(-4px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.6)';
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#3b82f6';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
-                }}
-            >
-                ⬆️
-            </button> */}
-
             <button
                 onClick={() => {
                     let animationFrameId = null;
@@ -1008,8 +1106,5 @@ export default function AdminDashboard() {
             </button>
 
         </div>
-
-
-
     );
 }
