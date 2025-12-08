@@ -29,7 +29,7 @@ export default function AdminDashboard() {
         "Anime", "Hành Động", "Phiêu Lưu", "Hài", "Hoạt Hình", "Giả Tưởng",
         "Kinh Dị", "Khoa Học Viễn Tưởng", "Tâm Lý", "Tình Cảm", "Gay Cấn",
         "Bí Ẩn", "Lãng Mạn", "Tài Liệu", "Hình Sự", "Gia Đình",
-        "Chính Kịch", "Lịch Sử", "Chiến Tranh"
+        "Chính Kịch", "Lịch Sử", "Chiến Tranh", "Nhạc", "Cổ Trang", "Miền Tây", "Phim 18+"
     ];
 
     const [formData, setFormData] = useState({
