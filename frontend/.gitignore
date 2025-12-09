@@ -45,8 +45,9 @@ next-env.d.ts
 # text
 infomation.txt
 todo.txt
-
+# json
 daophimvietsub-firebase-adminsdk-fbsvc-6ba034a119.json
+daophimvietsub-firebase-adminsdk-fbsvc-0cf78dc545.json
 
 #tool
 tool.js
