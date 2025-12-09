@@ -54,6 +54,10 @@ export const metadata: Metadata = {
     description: "Kho phim có tốc độ load nhanh, độ nét full HD.",
     // image: '/NiceAnime-header.png', // Tương tự ảnh OG
   },
+  // 6. Mã xác minh Google Search Console
+  verification: {
+    google: "eYYukttLRziLKYieptaO435u-qnvAtoSBKwQleTyMqk", // <<< THÊM DÒNG NÀY
+  },
 };
 
 export default function RootLayout({
