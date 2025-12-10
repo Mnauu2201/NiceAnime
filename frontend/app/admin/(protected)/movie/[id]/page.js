@@ -203,7 +203,8 @@ export default function MovieDetail() {
         category: [],
         year: new Date().getFullYear(),
         description: '',
-        format: 'Phim lẻ'
+        format: 'Phim lẻ',
+        otherTitles: '' // ** [ĐÃ SỬA 1/5] THÊM TRƯỜNG TÊN KHÁC **
     });
     const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -275,7 +276,8 @@ export default function MovieDetail() {
                         category: movieData.category || [],
                         year: movieData.year || new Date().getFullYear(),
                         description: movieData.description || '',
-                        format: movieData.format || 'Phim lẻ'
+                        format: movieData.format || 'Phim lẻ',
+                        otherTitles: movieData.otherTitles || '' // ** [ĐÃ SỬA 2/5] CẬP NHẬT KHI LOAD **
                     });
                 } else {
                     router.push('/admin');
@@ -429,6 +431,7 @@ export default function MovieDetail() {
                 year: editMovieData.year,
                 description: editMovieData.description,
                 format: editMovieData.format,
+                otherTitles: editMovieData.otherTitles, // ** [ĐÃ SỬA 3/5] LƯU TÊN KHÁC **
                 slug: slugify(editMovieData.title)
             });
 
@@ -436,6 +439,7 @@ export default function MovieDetail() {
             setMovie(prev => ({
                 ...prev,
                 ...editMovieData,
+                otherTitles: editMovieData.otherTitles, // ** CẬP NHẬT STATE SAU KHI LƯU **
                 slug: slugify(editMovieData.title)
             }));
 
@@ -458,7 +462,8 @@ export default function MovieDetail() {
             category: movie.category || [],
             year: movie.year || new Date().getFullYear(),
             description: movie.description || '',
-            format: movie.format || 'Phim lẻ'
+            format: movie.format || 'Phim lẻ',
+            otherTitles: movie.otherTitles || '' // ** [ĐÃ SỬA 4/5] RESET TÊN KHÁC **
         });
         setIsEditingMovie(false);
         setIsCategoryDropdownOpen(false);
@@ -620,7 +625,8 @@ export default function MovieDetail() {
                             ✏️ Chỉnh Sửa Thông Tin Phim
                         </h2>
                         <form onSubmit={handleSaveMovieInfo}>
-                            {/* Tên phim & Thumbnail */}
+
+                            {/* Tên phim & Thumbnail (giữ nguyên layout 2 cột) */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                                 <div>
                                     <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên phim *</label>
@@ -645,6 +651,19 @@ export default function MovieDetail() {
                                     />
                                 </div>
                             </div>
+
+                            {/* ** [ĐÃ SỬA 5/5] Tên khác (Thêm trường input mới) ** */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên khác (phân cách bằng dấu phẩy)</label>
+                                <input
+                                    type="text"
+                                    value={editMovieData.otherTitles}
+                                    onChange={(e) => setEditMovieData({ ...editMovieData, otherTitles: e.target.value })}
+                                    placeholder="Attack on Titan, AoT, SnK, Đại Chiến Titan"
+                                    style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                />
+                            </div>
+                            {/* ** KẾT THÚC SỬA ** */}
 
                             {/* Category, Format, Năm */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
@@ -870,6 +889,12 @@ export default function MovieDetail() {
                             <p style={{ color: '#cbd5e1', lineHeight: '1.75', margin: 0 }}>
                                 Tổng số tập: <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{movie.totalEpisodes || episodes.length}</span>
                             </p>
+                            {/* Hiển thị Tên khác */}
+                            {movie.otherTitles && (
+                                <p style={{ color: '#cbd5e1', lineHeight: '1.75', margin: 0 }}>
+                                    Tên khác: <span style={{ color: '#3b82f6', fontWeight: 'bold', fontStyle: 'italic' }}>{movie.otherTitles}</span>
+                                </p>
+                            )}
                             <p style={{ color: '#cbd5e1', lineHeight: '1.75', margin: 0 }}>
                                 {movie.description || 'Chưa có mô tả cho phim này.'}
                             </p>

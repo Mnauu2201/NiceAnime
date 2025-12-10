@@ -1,17 +1,41 @@
 'use client';
 import Image from 'next/image';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import Link from 'next/link';
+
+// Danh sách Thể loại (đồng bộ với Admin)
+const CATEGORIES = [
+    "Anime", "Hành Động", "Phiêu Lưu", "Hài", "Hoạt Hình", "Giả Tưởng",
+    "Kinh Dị", "Khoa Học Viễn Tưởng", "Tâm Lý", "Tình Cảm", "Gay Cấn",
+    "Bí Ẩn", "Lãng Mạn", "Tài Liệu", "Hình Sự", "Gia Đình",
+    "Chính Kịch", "Lịch Sử", "Chiến Tranh", "Nhạc", "Cổ Trang", "Miền Tây", "Phim 18+"
+];
+
+// Hàm slugify đơn giản (tái sử dụng từ lib/utils trong Admin)
+const slugify = (text) => {
+    if (!text) return '';
+    return text.toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-') // Replace spaces with -
+        .replace(/[^\w\-]+/g, '') // Remove all non-word characters (except dashes)
+        .replace(/\-\-+/g, '-') // Replace multiple dashes with single dash
+        .replace(/^-+/, '') // Trim - from start of text
+        .replace(/-+$/, ''); // Trim - from end of text
+};
 
 export default function Home() {
     const [movies, setMovies] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    // ** [THAY ĐỔI MỚI 1/3] **: Thêm state cho bộ lọc định dạng (Phim bộ / Phim lẻ)
     const [filterFormat, setFilterFormat] = useState(''); // '', 'Phim bộ', 'Phim lẻ'
+
+    // State cho Category Dropdown và Filter Category
+    const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+    const [filterCategory, setFilterCategory] = useState(''); // Category slug
+    const dropdownRef = useRef(null); // Ref để đóng dropdown khi click ra ngoài
 
     const MOVIES_PER_PAGE = 20;
 
@@ -23,17 +47,31 @@ export default function Home() {
         document.title = "NiceAnime";
     }, []);
 
+    // Xử lý click ngoài để đóng dropdown
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsCategoryDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const loadMovies = async () => {
         try {
-            // Lấy tối đa 20 phim mới nhất theo createdAt
             const moviesRef = collection(db, 'movies');
             const q = query(moviesRef, orderBy('createdAt', 'desc'));
             const querySnapshot = await getDocs(q);
             const moviesList = querySnapshot.docs.map((docSnap) => ({
                 id: docSnap.id,
-                // Đảm bảo category là mảng khi load
                 ...docSnap.data(),
-                category: Array.isArray(docSnap.data().category) ? docSnap.data().category : [docSnap.data().category].filter(Boolean)
+                // Đảm bảo category là mảng các slug khi load.
+                // Nếu category là string, chuyển nó thành [slugify(string)]
+                category: Array.isArray(docSnap.data().category)
+                    ? docSnap.data().category.map(c => slugify(c)) // đảm bảo cả mảng là slug
+                    : [slugify(docSnap.data().category)].filter(Boolean), // chỉ lấy slug nếu có
+                otherTitles: docSnap.data().otherTitles || ''
             }));
 
             setMovies(moviesList);
@@ -46,25 +84,46 @@ export default function Home() {
 
     const filteredMovies = useMemo(() => {
         let currentMovies = movies;
+        const lowerCaseSearchTerm = searchTerm.toLowerCase().trim();
 
-        // Lọc theo Tên (Search Term)
-        if (searchTerm.trim()) {
-            currentMovies = currentMovies.filter((movie) =>
-                movie.title?.toLowerCase().includes(searchTerm.toLowerCase())
-            );
+        // 1. Lọc theo Tên (Search Term) - Kiểm tra cả title và otherTitles
+        if (lowerCaseSearchTerm) {
+            currentMovies = currentMovies.filter((movie) => {
+                const titleMatch = movie.title?.toLowerCase().includes(lowerCaseSearchTerm);
+                const otherTitlesMatch = movie.otherTitles?.toLowerCase().includes(lowerCaseSearchTerm);
+
+                return titleMatch || otherTitlesMatch;
+            });
         }
 
-        // ** [THAY ĐỔI MỚI 2/3] **: Lọc theo Định dạng (Phim bộ / Phim lẻ)
+        // 2. Lọc theo Định dạng (Phim bộ / Phim lẻ)
         if (filterFormat) {
             currentMovies = currentMovies.filter((movie) => {
-                // Sử dụng default 'Phim lẻ' cho các phim cũ chưa có trường format
                 const movieFormat = movie.format || 'Phim lẻ';
                 return movieFormat === filterFormat;
             });
         }
 
+        // ** [SỬA LỖI LỌC 1/2] **: 3. Lọc theo Thể loại (Category)
+        if (filterCategory) {
+            currentMovies = currentMovies.filter((movie) => {
+                // movie.category là MẢNG các slug (ví dụ: ['lang-man', 'hai']).
+                // filterCategory là slug đang được chọn (ví dụ: 'lang-man').
+                // Chúng ta dùng .includes() để kiểm tra xem slug đã chọn có trong mảng category của phim không
+                return movie.category && movie.category.includes(filterCategory);
+            });
+        }
+
         return currentMovies;
-    }, [movies, searchTerm, filterFormat]); // Thêm filterFormat vào dependency
+    }, [movies, searchTerm, filterFormat, filterCategory]); // Thêm filterCategory vào dependency
+
+    // Lấy tên thể loại gốc từ slug
+    const getCategoryNameFromSlug = (slug) => {
+        if (!slug) return '';
+        // Tìm tên gốc (Language Case) từ danh sách CATEGORIES
+        const category = CATEGORIES.find(cat => slugify(cat) === slug);
+        return category || slug.replace(/-/g, ' '); // Fallback nếu không tìm thấy
+    };
 
     // Tính toán phân trang
     const totalPages = Math.ceil(filteredMovies.length / MOVIES_PER_PAGE);
@@ -75,18 +134,27 @@ export default function Home() {
     // Reset về trang 1 khi search hoặc thay đổi filter
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, filterFormat]); // Thêm filterFormat vào dependency
+    }, [searchTerm, filterFormat, filterCategory]);
 
     const featuredMovie = movies[0];
 
-    // Hàm xử lý khi nhấn nút lọc
+    // Hàm xử lý khi nhấn nút lọc Format
     const handleFormatFilter = (format) => {
-        // Nếu nhấn nút đang chọn, reset về trạng thái 'tất cả' ('')
         if (filterFormat === format) {
             setFilterFormat('');
         } else {
             setFilterFormat(format);
         }
+        // Khi lọc theo Format, xóa lọc theo Category để tránh xung đột
+        setFilterCategory('');
+        setIsCategoryDropdownOpen(false); // Đóng dropdown nếu đang mở
+    };
+
+    // Hàm xử lý khi chọn Thể loại
+    const handleCategoryFilter = (categorySlug) => {
+        setFilterCategory(categorySlug);
+        setIsCategoryDropdownOpen(false); // Đóng dropdown sau khi chọn
+        setFilterFormat(''); // Khi lọc theo Category, xóa lọc theo Format để tránh xung đột
     };
 
     if (loading) {
@@ -162,13 +230,160 @@ export default function Home() {
                             style={{
                                 height: '72px',
                                 width: 'auto',
-                                // maxWidth: 'none',
                                 objectFit: 'contain',
                                 marginTop: '-6px',
                                 marginBottom: '-6px',
                             }}
                         />
                     </Link>
+
+                    {/* Menu và Dropdown Thể loại vào Header */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1.5rem',
+                        paddingRight: '1rem',
+                    }}>
+                        {/* Link Giới thiệu */}
+                        <Link href="/support/about" style={{ color: '#f5f5f5', textDecoration: 'none', fontSize: '0.95rem', fontWeight: 600 }}>
+                            Giới thiệu
+                        </Link>
+
+                        {/* Link Liên hệ */}
+                        <Link href="/support/contact" style={{ color: '#f5f5f5', textDecoration: 'none', fontSize: '0.95rem', fontWeight: 600 }}>
+                            Liên hệ
+                        </Link>
+
+                        {/* Bộ lọc Định dạng (Mới) */}
+                        <button
+                            onClick={() => handleFormatFilter('Phim bộ')}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                backgroundColor: filterFormat === 'Phim bộ' ? '#ea580c' : 'transparent', // Màu cam khi active
+                                color: 'white',
+                                border: filterFormat === 'Phim bộ' ? 'none' : '1px solid #94a3b8',
+                                borderRadius: '0.375rem',
+                                cursor: 'pointer',
+                                fontSize: '0.95rem',
+                                fontWeight: '600',
+                                transition: 'background-color 0.2s',
+                            }}
+                        >
+                            Phim Bộ
+                        </button>
+                        <button
+                            onClick={() => handleFormatFilter('Phim lẻ')}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                backgroundColor: filterFormat === 'Phim lẻ' ? '#ef4444' : 'transparent', // Màu đỏ khi active
+                                color: 'white',
+                                border: filterFormat === 'Phim lẻ' ? 'none' : '1px solid #94a3b8',
+                                borderRadius: '0.375rem',
+                                cursor: 'pointer',
+                                fontSize: '0.95rem',
+                                fontWeight: '600',
+                                transition: 'background-color 0.2s',
+                            }}
+                        >
+                            Phim Lẻ
+                        </button>
+
+                        {/* Dropdown Thể loại (Đã chỉnh sửa Multi-Column) */}
+                        <div ref={dropdownRef} style={{ position: 'relative' }}>
+                            <button
+                                onClick={() => setIsCategoryDropdownOpen(prev => !prev)}
+                                style={{
+                                    backgroundColor: filterCategory ? '#be185d' : 'transparent', // Màu hồng đậm khi active
+                                    color: 'white',
+                                    border: filterCategory ? 'none' : '1px solid #94a3b8',
+                                    borderRadius: '0.375rem',
+                                    padding: '0.5rem 1rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.95rem',
+                                    fontWeight: 600,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    transition: 'background-color 0.2s, border-color 0.2s'
+                                }}
+                            >
+                                Thể loại {filterCategory ? `(${getCategoryNameFromSlug(filterCategory)})` : ''} {/* ** [SỬA LỖI HIỂN THỊ TÊN] ** */}
+                                <span style={{ transform: isCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+                            </button>
+                            {isCategoryDropdownOpen && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    right: 0,
+                                    marginTop: '0.5rem',
+                                    backgroundColor: '#1f2937',
+                                    border: '1px solid #4b5563',
+                                    borderRadius: '0.375rem',
+                                    boxShadow: '0 8px 16px rgba(0,0,0,0.4)',
+                                    zIndex: 20,
+
+                                    // CSS Multi-Column để loại bỏ scrollbar ngang/dọc thừa
+                                    width: '400px', // Chiều rộng cố định cho 2 cột
+                                    padding: '0.5rem',
+                                    columnCount: 2,
+                                    columnGap: '10px',
+                                    MozColumnCount: 2,
+                                    MozColumnGap: '10px',
+                                    WebkitColumnCount: 2,
+                                    WebkitColumnGap: '10px',
+
+                                }}>
+                                    {/* Nút Xóa Lọc */}
+                                    <div
+                                        onClick={() => handleCategoryFilter('')}
+                                        style={{
+                                            padding: '0.5rem',
+                                            color: filterCategory === '' ? '#facc15' : '#e5e7eb',
+                                            cursor: 'pointer',
+                                            fontWeight: 700,
+                                            borderBottom: '1px solid #374151',
+                                            marginBottom: '0.5rem',
+                                            columnSpan: 'all',
+                                            WebkitColumnSpan: 'all',
+                                            MozColumnSpan: 'all',
+                                        }}
+                                    >
+                                        Tất cả Thể loại
+                                    </div>
+                                    {CATEGORIES.map((cat) => {
+                                        const catSlug = slugify(cat);
+                                        return (
+                                            <div
+                                                key={catSlug}
+                                                onClick={() => handleCategoryFilter(catSlug)}
+                                                style={{
+                                                    padding: '0.5rem',
+                                                    color: filterCategory === catSlug ? '#3b82f6' : '#e5e7eb',
+                                                    backgroundColor: filterCategory === catSlug ? '#374151' : 'transparent',
+                                                    borderRadius: '0.25rem',
+                                                    cursor: 'pointer',
+                                                    transition: 'background-color 0.1s',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    // Ngăn không cho mục bị cắt ngang giữa hai cột
+                                                    breakInside: 'avoid-column',
+                                                    WebkitColumnBreakInside: 'avoid',
+                                                    MozColumnBreakInside: 'avoid',
+                                                }}
+                                                onMouseEnter={(e) => { if (filterCategory !== catSlug) e.currentTarget.style.backgroundColor = '#1f2937'; }}
+                                                onMouseLeave={(e) => { if (filterCategory !== catSlug) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                            >
+                                                {cat}
+                                                {filterCategory === catSlug && <span style={{ color: '#3b82f6' }}>✓</span>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div style={{
                         color: '#f5f5f5',
                         fontSize: '0.95rem',
@@ -307,47 +522,23 @@ export default function Home() {
                         <p style={{ color: '#94a3b8' }}>
                             {filteredMovies.length} phim được tìm thấy
                             {!searchTerm && totalPages > 1 && ` • Trang ${currentPage}/${totalPages}`}
+                            {/* Hiển thị trạng thái lọc */}
+                            {(filterFormat || filterCategory) && (
+                                <span style={{ marginLeft: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>
+                                    (Lọc: {filterFormat || ''} {filterFormat && filterCategory ? ' + ' : ''} {filterCategory ? getCategoryNameFromSlug(filterCategory) : ''}) {/* ** [SỬA LỖI HIỂN THỊ TÊN] ** */}
+                                </span>
+                            )}
                         </p>
                     </div>
 
-                    {/* ** [THAY ĐỔI MỚI 3/3] **: Thêm nút lọc Phim bộ/Phim lẻ */}
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        {/* <span style={{ fontSize: '1rem', fontWeight: '600', color: '#94a3b8' }}>Lọc theo:</span> */}
-                        <button
-                            onClick={() => handleFormatFilter('Phim bộ')}
-                            style={{
-                                padding: '0.5rem 1rem',
-                                backgroundColor: filterFormat === 'Phim bộ' ? '#ea580c' : '#374151', // Màu cam khi active
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '999px',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                fontWeight: '600',
-                                transition: 'background-color 0.2s',
-                            }}
-                        >
-                            Phim Bộ
-                        </button>
-                        <button
-                            onClick={() => handleFormatFilter('Phim lẻ')}
-                            style={{
-                                padding: '0.5rem 1rem',
-                                backgroundColor: filterFormat === 'Phim lẻ' ? '#ef4444' : '#374151', // Màu đỏ khi active
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '999px',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                fontWeight: '600',
-                                transition: 'background-color 0.2s',
-                            }}
-                        >
-                            Phim Lẻ
-                        </button>
-                        {filterFormat && (
+                    {/* Nút Xóa Lọc Tổng thể */}
+                    {(filterFormat || filterCategory) && (
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                             <button
-                                onClick={() => setFilterFormat('')}
+                                onClick={() => {
+                                    setFilterFormat('');
+                                    setFilterCategory('');
+                                }}
                                 style={{
                                     padding: '0.5rem 1rem',
                                     backgroundColor: 'transparent',
@@ -359,11 +550,10 @@ export default function Home() {
                                     fontWeight: '600',
                                 }}
                             >
-                                Xóa Lọc
+                                Xóa Tất Cả Bộ Lọc
                             </button>
-                        )}
-                    </div>
-                    {/* ** [KẾT THÚC THAY ĐỔI] ** */}
+                        </div>
+                    )}
                 </div>
 
                 {movies.length === 0 ? (
@@ -390,7 +580,7 @@ export default function Home() {
                         borderRadius: '1rem'
                     }}>
                         <p style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Không tìm thấy phim phù hợp.</p>
-                        <p style={{ color: '#94a3b8' }}>Thử một từ khóa khác nhé!</p>
+                        <p style={{ color: '#94a3b8' }}>Thử một từ khóa hoặc bộ lọc khác nhé!</p>
                     </div>
                 ) : (
                     <div style={{
@@ -402,14 +592,12 @@ export default function Home() {
                             const totalEpisodes = movie.totalEpisodes || movie.episodes?.length || 1;
                             const currentEpisode = movie.currentEpisode || movie.episodes?.length || totalEpisodes;
 
-                            // Định dạng Phim bộ/Phim lẻ (dùng lại logic đã thêm ở bước trước)
                             const movieFormatRaw = movie.format || 'Phim lẻ';
                             const movieFormat = movieFormatRaw === 'Phim bộ' ? 'BỘ' : 'LẺ';
-                            const formatColor = movieFormatRaw === 'Phim bộ' ? 'rgba(234, 88, 12, 0.95)' : 'rgba(239, 68, 68, 0.95)'; // Cam cho Bộ, Đỏ cho Lẻ
+                            const formatColor = movieFormatRaw === 'Phim bộ' ? 'rgba(234, 88, 12, 0.95)' : 'rgba(239, 68, 68, 0.95)';
 
                             return (
                                 <Link
-                                    // href={`/movie/${movie.id}`}
                                     href={`/movie/${movie.slug || movie.id}`}
                                     key={movie.id}
                                     style={{ textDecoration: 'none', color: 'white' }}
@@ -464,7 +652,7 @@ export default function Home() {
                                             position: 'absolute',
                                             top: '0.75rem',
                                             right: '0.75rem',
-                                            backgroundColor: formatColor, // Dùng màu đã xác định
+                                            backgroundColor: formatColor,
                                             color: 'white',
                                             padding: '0.35rem 0.75rem',
                                             borderRadius: '999px',
@@ -505,11 +693,9 @@ export default function Home() {
                                             }}>
                                                 <span>📅 {movie.year}</span>
                                                 <span>•</span>
-                                                {/* ** START FIX: Phân cách các thể loại bằng dấu phẩy và khoảng trắng ** */}
                                                 <span>
-                                                    🎭 {Array.isArray(movie.category) ? movie.category.join(', ') : movie.category}
+                                                    🎭 {Array.isArray(movie.category) ? movie.category.map(slug => getCategoryNameFromSlug(slug)).join(', ') : getCategoryNameFromSlug(movie.category || '')} {/* ** [SỬA LỖI HIỂN THỊ TÊN CATEGORY Ở THUMBNAIL] ** */}
                                                 </span>
-                                                {/* ** END FIX ** */}
                                             </div>
                                         </div>
                                     </div>
@@ -548,7 +734,6 @@ export default function Home() {
                         </button>
 
                         {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                            // Hiển thị trang đầu, cuối, và các trang xung quanh trang hiện tại
                             if (
                                 page === 1 ||
                                 page === totalPages ||
@@ -620,7 +805,6 @@ export default function Home() {
                 }}>
                     <div style={{
                         display: 'grid',
-                        // Thay đổi cấu trúc lưới để chứa 5 cột (hoặc 4 cột nếu cần)
                         gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                         gap: '3rem',
                         marginBottom: '3rem',
@@ -692,11 +876,13 @@ export default function Home() {
                                 flexDirection: 'column',
                                 gap: '0.75rem'
                             }}>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hành Động (Đang Cập Nhật)</a></li>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Phiêu Lưu (Đang Cập Nhật)</a></li>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Hài Hước (Đang Cập Nhật)</a></li>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Lãng Mạn (Đang Cập Nhật)</a></li>
-                                <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>Học Đường (Đang Cập Nhật)</a></li>
+                                {CATEGORIES.slice(0, 5).map(cat => (
+                                    <li key={cat}>
+                                        <a href={`#?category=${slugify(cat)}`} style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}>
+                                            {cat}
+                                        </a>
+                                    </li>
+                                ))}
                             </ul>
                         </div>
 
@@ -724,7 +910,6 @@ export default function Home() {
                             </ul>
                         </div>
 
-                        {/* ** [THÊM MỚI] Cột Hợp Tác ** */}
                         <div>
                             <h3 style={{
                                 color: 'white',
@@ -747,7 +932,6 @@ export default function Home() {
                                 <li><a href="#" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', transition: 'color 0.3s' }}></a></li>
                             </ul>
                         </div>
-                        {/* ** [KẾT THÚC THÊM MỚI] ** */}
                     </div>
 
                     <div style={{

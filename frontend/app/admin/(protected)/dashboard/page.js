@@ -39,7 +39,9 @@ export default function AdminDashboard() {
         year: new Date().getFullYear(),
         description: '',
         format: 'Phim lẻ',
-        totalEpisodes: 1
+        totalEpisodes: 1,
+        // 🌟 THAY ĐỔI: Thêm trường Tên Khác/Phụ
+        otherTitles: ''
     });
 
     const [episodes, setEpisodes] = useState([
@@ -53,7 +55,9 @@ export default function AdminDashboard() {
                 id: doc.id,
                 ...doc.data(),
                 category: Array.isArray(doc.data().category) ? doc.data().category : [doc.data().category].filter(Boolean),
-                format: doc.data().format || 'Phim lẻ'
+                format: doc.data().format || 'Phim lẻ',
+                // Đảm bảo trường này tồn tại khi load
+                otherTitles: doc.data().otherTitles || ''
             }));
             setMovies(moviesList);
         } catch (error) {
@@ -178,6 +182,8 @@ export default function AdminDashboard() {
                 description: formData.description,
                 format: formData.format,
                 totalEpisodes: formData.totalEpisodes,
+                // 🌟 THAY ĐỔI: Lưu otherTitles vào Firebase
+                otherTitles: formData.otherTitles.trim(),
                 createdAt: new Date()
             });
 
@@ -202,6 +208,7 @@ export default function AdminDashboard() {
             console.log(`Created ${episodes.length} episodes for movie ${movieRef.id}`);
             showNotification(`Thêm phim "${formData.title}" với ${formData.totalEpisodes} tập thành công!`, 'success');
 
+            // 🌟 THAY ĐỔI: Reset state bao gồm otherTitles
             setFormData({
                 title: '',
                 thumbnail: '',
@@ -209,7 +216,8 @@ export default function AdminDashboard() {
                 year: new Date().getFullYear(),
                 description: '',
                 format: 'Phim lẻ',
-                totalEpisodes: 1
+                totalEpisodes: 1,
+                otherTitles: ''
             });
             setEpisodes([{ episodeNumber: 1, title: 'Tập 1', videoUrl: '' }]);
 
@@ -299,10 +307,19 @@ export default function AdminDashboard() {
         }
     }, [movies, loading]);
 
-    // Lọc phim theo tên
-    const filteredMovies = movies.filter((movie) =>
-        movie.title?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // 🌟 THAY ĐỔI: Logic lọc phim mới, kiểm tra cả Tên chính và Tên phụ/Từ khóa
+    const filteredMovies = movies.filter((movie) => {
+        const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+        const titleMatch = movie.title?.toLowerCase().includes(lowerCaseSearchTerm);
+
+        // Chuyển otherTitles thành chữ thường để tìm kiếm
+        const otherTitlesMatch = movie.otherTitles?.toLowerCase().includes(lowerCaseSearchTerm);
+
+        // Phim được tìm thấy nếu khớp với tên chính HOẶC tên phụ
+        return titleMatch || otherTitlesMatch;
+    });
+    // Kết thúc logic lọc phim mới
 
     // ** MỚI: Tính toán phân trang **
     const totalPages = Math.ceil(filteredMovies.length / MOVIES_PER_PAGE);
@@ -621,6 +638,7 @@ export default function AdminDashboard() {
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>➕ Thêm Phim Mới</h2>
 
                     <form onSubmit={handleAddMovie}>
+                        {/* Tên phim và Link Thumbnail */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên phim *</label>
@@ -649,6 +667,20 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
+                        {/* 🌟 THAY ĐỔI: Thêm trường Tên Khác/Từ khóa */}
+                        <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên Khác/Từ khóa (Ngăn cách bằng dấu phẩy)</label>
+                            <input
+                                type="text"
+                                value={formData.otherTitles}
+                                onChange={(e) => setFormData({ ...formData, otherTitles: e.target.value })}
+                                placeholder="Attack on Titan, AoT, SnK"
+                                style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                disabled={uploading}
+                            />
+                        </div>
+
+                        {/* Thể loại, Định dạng, Năm, Tổng số tập */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                             <div ref={dropdownRef} style={{ position: 'relative' }}>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Thể loại (Có thể chọn nhiều) *</label>
@@ -981,6 +1013,12 @@ export default function AdminDashboard() {
                                         </div>
                                         <div>
                                             <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>{movie.title}</h3>
+                                            {/* Hiển thị Tên Khác/Từ khóa nếu có */}
+                                            {movie.otherTitles && (
+                                                <p style={{ color: '#60a5fa', fontSize: '0.875rem', fontStyle: 'italic', marginBottom: '0.25rem' }}>
+                                                    Tên khác: {movie.otherTitles}
+                                                </p>
+                                            )}
                                             <p style={{ color: '#9ca3af', marginBottom: '0.25rem' }}>
                                                 <strong>Định dạng:</strong> {movie.format || 'N/A'} •
                                                 <strong> Thể loại:</strong> {Array.isArray(movie.category) ? movie.category.join(', ') : movie.category} • {movie.year} • {movie.totalEpisodes} tập
