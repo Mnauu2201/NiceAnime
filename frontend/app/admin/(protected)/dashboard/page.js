@@ -18,12 +18,15 @@ export default function AdminDashboard() {
     const router = useRouter();
     const [searchTerm, setSearchTerm] = useState('');
 
-    // ** MỚI: State cho phân trang **
+    // ** State cho phân trang **
     const [currentPage, setCurrentPage] = useState(1);
     const MOVIES_PER_PAGE = 20;
 
     const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
+
+    // ** STATE MỚI CHO VALIDATION REAL-TIME **
+    const [titleError, setTitleError] = useState('');
 
     const CATEGORIES = [
         "Anime", "Hành Động", "Phiêu Lưu", "Hài", "Hoạt Hình", "Giả Tưởng",
@@ -40,7 +43,6 @@ export default function AdminDashboard() {
         description: '',
         format: 'Phim lẻ',
         totalEpisodes: 1,
-        // 🌟 THAY ĐỔI: Thêm trường Tên Khác/Phụ
         otherTitles: ''
     });
 
@@ -56,7 +58,6 @@ export default function AdminDashboard() {
                 ...doc.data(),
                 category: Array.isArray(doc.data().category) ? doc.data().category : [doc.data().category].filter(Boolean),
                 format: doc.data().format || 'Phim lẻ',
-                // Đảm bảo trường này tồn tại khi load
                 otherTitles: doc.data().otherTitles || ''
             }));
             setMovies(moviesList);
@@ -155,9 +156,65 @@ export default function AdminDashboard() {
         });
     };
 
+    // ** HÀM KIỂM TRA TRÙNG LẶP TÊN PHIM REAL-TIME **
+    const checkDuplicateTitle = (currentFormData) => {
+        const normalizedNewTitle = currentFormData.title.trim().toLowerCase();
+        // Tách và chuẩn hóa tên phụ mới, loại bỏ giá trị rỗng
+        const newOtherTitles = currentFormData.otherTitles.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+        let isDuplicate = false;
+
+        if (normalizedNewTitle.length > 0 || newOtherTitles.length > 0) {
+            isDuplicate = movies.some(movie => {
+                const normalizedExistingTitle = movie.title.trim().toLowerCase();
+                const existingOtherTitles = (movie.otherTitles || '')
+                    .split(',')
+                    .map(t => t.trim().toLowerCase())
+                    .filter(Boolean);
+
+                // A. Tên Chính mới trùng Tên Chính cũ
+                if (normalizedNewTitle.length > 0 && normalizedNewTitle === normalizedExistingTitle) return true;
+
+                // B. Tên Chính mới trùng Tên Phụ cũ
+                if (normalizedNewTitle.length > 0 && existingOtherTitles.includes(normalizedNewTitle)) return true;
+
+                // C. Tên Phụ mới trùng Tên Chính cũ (kiểm tra bất kỳ tên phụ nào)
+                if (newOtherTitles.includes(normalizedExistingTitle)) return true;
+
+                // D. Tên Phụ mới trùng Tên Phụ cũ
+                const hasCommonOtherTitle = newOtherTitles.some(newOther => existingOtherTitles.includes(newOther));
+                if (hasCommonOtherTitle) return true;
+
+                return false;
+            });
+        }
+
+        if (isDuplicate) {
+            setTitleError('Phim có tên chính hoặc tên phụ/từ khóa trùng với một phim đã tồn tại.');
+            return true; // Trùng
+        } else {
+            setTitleError('');
+            return false; // Không trùng
+        }
+    };
+
+    // ** HÀM MỚI: Xử lý thay đổi form và validation **
+    const handleFormChange = (e) => {
+        const { name, value } = e.target;
+        const newFormData = { ...formData, [name]: value };
+        setFormData(newFormData);
+
+        // Gọi kiểm tra trùng lặp ngay khi người dùng nhập Tên chính hoặc Tên phụ
+        if (name === 'title' || name === 'otherTitles') {
+            checkDuplicateTitle(newFormData);
+        }
+    };
+
+
     const handleAddMovie = async (e) => {
         e.preventDefault();
 
+        // 1. Kiểm tra tập phim và thể loại
         const invalidEpisodes = episodes.filter(ep => !ep.videoUrl.trim());
         if (invalidEpisodes.length > 0) {
             showNotification(`Vui lòng điền link video cho tất cả ${formData.totalEpisodes} tập!`, 'error');
@@ -168,6 +225,15 @@ export default function AdminDashboard() {
             showNotification('Vui lòng chọn ít nhất một thể loại!', 'error');
             return;
         }
+
+        // 2. SỬ DỤNG LOGIC KIỂM TRA TRÙNG LẶP REAL-TIME ĐÃ CÓ
+        const isDuplicateFinalCheck = checkDuplicateTitle(formData);
+
+        if (isDuplicateFinalCheck) {
+            showNotification(`LỖI: Phim có tên chính hoặc tên phụ/từ khóa trùng với một phim đã tồn tại. Vui lòng kiểm tra lại.`, 'error');
+            return; // Dừng quá trình thêm phim
+        }
+        // -----------------------------------------------------------
 
         setUploading(true);
 
@@ -182,7 +248,6 @@ export default function AdminDashboard() {
                 description: formData.description,
                 format: formData.format,
                 totalEpisodes: formData.totalEpisodes,
-                // 🌟 THAY ĐỔI: Lưu otherTitles vào Firebase
                 otherTitles: formData.otherTitles.trim(),
                 createdAt: new Date()
             });
@@ -208,7 +273,7 @@ export default function AdminDashboard() {
             console.log(`Created ${episodes.length} episodes for movie ${movieRef.id}`);
             showNotification(`Thêm phim "${formData.title}" với ${formData.totalEpisodes} tập thành công!`, 'success');
 
-            // 🌟 THAY ĐỔI: Reset state bao gồm otherTitles
+            // Reset state
             setFormData({
                 title: '',
                 thumbnail: '',
@@ -220,7 +285,9 @@ export default function AdminDashboard() {
                 otherTitles: ''
             });
             setEpisodes([{ episodeNumber: 1, title: 'Tập 1', videoUrl: '' }]);
+            setTitleError(''); // Reset lỗi
 
+            // Tải lại danh sách phim để cập nhật state 'movies' cho lần kiểm tra tiếp theo
             loadMovies();
         } catch (error) {
             console.error('Error adding movie:', error);
@@ -307,7 +374,7 @@ export default function AdminDashboard() {
         }
     }, [movies, loading]);
 
-    // 🌟 THAY ĐỔI: Logic lọc phim mới, kiểm tra cả Tên chính và Tên phụ/Từ khóa
+    // Logic lọc phim
     const filteredMovies = movies.filter((movie) => {
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
@@ -319,26 +386,25 @@ export default function AdminDashboard() {
         // Phim được tìm thấy nếu khớp với tên chính HOẶC tên phụ
         return titleMatch || otherTitlesMatch;
     });
-    // Kết thúc logic lọc phim mới
 
-    // ** MỚI: Tính toán phân trang **
+    // Tính toán phân trang
     const totalPages = Math.ceil(filteredMovies.length / MOVIES_PER_PAGE);
     const startIndex = (currentPage - 1) * MOVIES_PER_PAGE;
     const endIndex = startIndex + MOVIES_PER_PAGE;
     const currentMovies = filteredMovies.slice(startIndex, endIndex);
 
-    // ** MỚI: Reset về trang 1 khi search **
+    // Reset về trang 1 khi search
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm]);
 
-    // ** MỚI: Hàm chuyển trang **
+    // Hàm chuyển trang
     const goToPage = (page) => {
         setCurrentPage(page);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    // ** MỚI: Component Pagination **
+    // Component Pagination
     const PaginationControls = () => {
         if (totalPages <= 1) return null;
 
@@ -633,7 +699,7 @@ export default function AdminDashboard() {
                     </p>
                 </div>
 
-                {/* Add Movie Form - Giữ nguyên form thêm phim */}
+                {/* Add Movie Form */}
                 <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem', marginBottom: '2rem' }}>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>➕ Thêm Phim Mới</h2>
 
@@ -644,21 +710,36 @@ export default function AdminDashboard() {
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên phim *</label>
                                 <input
                                     type="text"
+                                    name="title"
                                     value={formData.title}
-                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    onChange={handleFormChange}
                                     placeholder="One Piece"
-                                    style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.375rem',
+                                        backgroundColor: '#374151',
+                                        color: 'white',
+                                        // Highlight border khi có lỗi trùng lặp
+                                        border: titleError ? '1px solid #dc2626' : '1px solid #4b5563'
+                                    }}
                                     required
                                     disabled={uploading}
                                 />
+                                {titleError && (
+                                    <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                                        ⚠️ {titleError}
+                                    </p>
+                                )}
                             </div>
 
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Link Thumbnail *</label>
                                 <input
                                     type="url"
+                                    name="thumbnail"
                                     value={formData.thumbnail}
-                                    onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
+                                    onChange={handleFormChange}
                                     placeholder="https://animehay.ai/wp-content/uploads/..."
                                     style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
                                     required
@@ -667,15 +748,24 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* 🌟 THAY ĐỔI: Thêm trường Tên Khác/Từ khóa */}
+                        {/* Tên Khác/Từ khóa */}
                         <div style={{ marginBottom: '1rem' }}>
                             <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Tên Khác/Từ khóa (Ngăn cách bằng dấu phẩy)</label>
                             <input
                                 type="text"
+                                name="otherTitles"
                                 value={formData.otherTitles}
-                                onChange={(e) => setFormData({ ...formData, otherTitles: e.target.value })}
+                                onChange={handleFormChange}
                                 placeholder="Attack on Titan, AoT, SnK"
-                                style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.5rem 1rem',
+                                    borderRadius: '0.375rem',
+                                    backgroundColor: '#374151',
+                                    color: 'white',
+                                    // Highlight border khi có lỗi trùng lặp
+                                    border: titleError ? '1px solid #dc2626' : '1px solid #4b5563'
+                                }}
                                 disabled={uploading}
                             />
                         </div>
@@ -759,8 +849,9 @@ export default function AdminDashboard() {
                             <div>
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Định dạng phim *</label>
                                 <select
+                                    name="format"
                                     value={formData.format}
-                                    onChange={(e) => setFormData({ ...formData, format: e.target.value })}
+                                    onChange={handleFormChange}
                                     style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
                                     required
                                     disabled={uploading}
@@ -774,6 +865,7 @@ export default function AdminDashboard() {
                                 <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Năm</label>
                                 <input
                                     type="number"
+                                    name="year"
                                     value={formData.year}
                                     onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
                                     style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
@@ -787,6 +879,7 @@ export default function AdminDashboard() {
                                     type="number"
                                     min="1"
                                     max="10000"
+                                    name="totalEpisodes"
                                     value={formData.totalEpisodes}
                                     onChange={(e) => handleTotalEpisodesChange(e.target.value)}
                                     style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
@@ -799,8 +892,9 @@ export default function AdminDashboard() {
                         <div style={{ marginBottom: '1rem' }}>
                             <label style={{ display: 'block', color: '#d1d5db', marginBottom: '0.5rem' }}>Mô tả</label>
                             <textarea
+                                name="description"
                                 value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                onChange={handleFormChange}
                                 rows="3"
                                 placeholder="One Piece là bộ anime huyền thoại..."
                                 style={{ width: '100%', padding: '0.5rem 1rem', borderRadius: '0.375rem', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563' }}
@@ -876,20 +970,20 @@ export default function AdminDashboard() {
 
                         <button
                             type="submit"
-                            disabled={uploading}
+                            disabled={uploading || titleError} // Vô hiệu hóa nút Submit nếu có lỗi trùng lặp
                             style={{
                                 width: '100%',
-                                backgroundColor: uploading ? '#6b7280' : '#2563eb',
+                                backgroundColor: uploading || titleError ? '#6b7280' : '#2563eb',
                                 color: 'white',
                                 fontWeight: 'bold',
                                 padding: '0.75rem',
                                 borderRadius: '0.375rem',
                                 border: 'none',
-                                cursor: uploading ? 'not-allowed' : 'pointer',
+                                cursor: uploading || titleError ? 'not-allowed' : 'pointer',
                                 fontSize: '1.125rem'
                             }}
                         >
-                            {uploading ? '⏳ Đang tải lên Firebase...' : `➕ Thêm Phim (${formData.totalEpisodes} tập)`}
+                            {uploading ? '⏳ Đang tải lên Firebase...' : titleError ? '❌ Vui lòng sửa lỗi trùng lặp' : `➕ Thêm Phim (${formData.totalEpisodes} tập)`}
                         </button>
                     </form>
                 </div>
@@ -943,7 +1037,7 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
-                    {/* ** MỚI: Hiển thị thông tin phân trang ** */}
+                    {/* Hiển thị thông tin phân trang */}
                     {filteredMovies.length > 0 && (
                         <div style={{
                             backgroundColor: '#374151',
@@ -1077,7 +1171,7 @@ export default function AdminDashboard() {
                         )}
                     </div>
 
-                    {/* ** MỚI: Hiển thị Pagination Controls ** */}
+                    {/* Hiển thị Pagination Controls */}
                     <PaginationControls />
                 </div>
             </div>
