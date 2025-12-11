@@ -1,17 +1,69 @@
 import { NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebaseAdmin';
 
-// Lấy danh sách admin từ biến môi trường Server
+// CẤU HÌNH BẢO MẬT
 const ALLOWED_ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
 
 const COOKIE_NAME = 'adminSession';
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 5; // 5 ngày (để admin đỡ phải login lại nhiều lần)
+const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 5; // 5 ngày
+
+// --- RATE LIMITING (CHỐNG BRUTE FORCE) ---
+// Giới hạn: 5 lần thử trong vòng 15 phút cho mỗi IP
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+const rateLimitMap = new Map<string, { count: number; lastAttempt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+    const now = Date.now();
+    const record = rateLimitMap.get(ip);
+
+    if (!record) {
+        rateLimitMap.set(ip, { count: 1, lastAttempt: now });
+        return true;
+    }
+
+    if (now - record.lastAttempt > RATE_LIMIT_WINDOW_MS) {
+        // Đã qua thời gian cửa sổ, reset lại
+        rateLimitMap.set(ip, { count: 1, lastAttempt: now });
+        return true;
+    }
+
+    if (record.count >= MAX_ATTEMPTS) {
+        return false; // Bị chặn
+    }
+
+    record.count++;
+    record.lastAttempt = now;
+    return true;
+}
+
+// Dọn dẹp map định kỳ để tránh tràn bộ nhớ (Mỗi 1 giờ)
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of rateLimitMap.entries()) {
+        if (now - record.lastAttempt > RATE_LIMIT_WINDOW_MS) {
+            rateLimitMap.delete(ip);
+        }
+    }
+}, 60 * 60 * 1000);
 
 export async function POST(request: Request) {
     try {
+        // 1. Lấy IP người dùng để check Rate Limit
+        // Trên Vercel/Next.js, IP thường nằm trong header 'x-forwarded-for'
+        const ip = request.headers.get('x-forwarded-for') || 'unknown';
+
+        if (!checkRateLimit(ip)) {
+            console.warn(`[Security] Rate limit exceeded for IP: ${ip}`);
+            return NextResponse.json(
+                { error: 'Bạn đã thử quá nhiều lần. Vui lòng quay lại sau 15 phút.' },
+                { status: 429 }
+            );
+        }
+
         const body = await request.json();
         const { idToken } = body;
 
@@ -19,42 +71,42 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Thiếu thông tin xác thực' }, { status: 400 });
         }
 
-        // 1. Xác minh ID Token gửi từ client
+        // 2. Xác minh ID Token gửi từ client
         const decodedIdToken = await adminAuth.verifyIdToken(idToken);
         const userEmail = decodedIdToken.email?.toLowerCase();
 
-        // 2. Kiểm tra xem email này có trong danh sách Admin cho phép không
-        // Đây là bước quan trọng nhất để chặn người lạ
+        // 3. Kiểm tra Whitelist (Quan trọng nhất)
         if (!userEmail || !ALLOWED_ADMIN_EMAILS.includes(userEmail)) {
-            console.warn(`[Security] Unauthorized access attempt by: ${userEmail}`);
-            return NextResponse.json({ error: 'Tài khoản không có quyền truy cập Admin' }, { status: 403 });
+            console.warn(`[Security] Unauthorized access attempt by: ${userEmail} (IP: ${ip})`);
+            // Trả về lỗi chung chung để hacker không biết là sai email hay sai token
+            return NextResponse.json({ error: 'Quyền truy cập bị từ chối' }, { status: 403 });
         }
 
-        // 3. Tạo Session Cookie
-        // Cookie này đại diện cho phiên làm việc của Admin, an toàn hơn dùng token trực tiếp
+        // 4. Tạo Session Cookie
         const sessionCookie = await adminAuth.createSessionCookie(idToken, {
             expiresIn: SESSION_DURATION_MS,
         });
 
-        // 4. Trả về Response kèm Cookie
+        // 5. Trả về Response kèm Cookie cấu hình TỐI ĐA
         const response = NextResponse.json({ success: true });
 
         response.cookies.set({
             name: COOKIE_NAME,
             value: sessionCookie,
-            httpOnly: true, // Javascript client không thể đọc (chống XSS)
-            // secure: process.env.NODE_ENV !== 'production',
-            secure: process.env.NODE_ENV !== 'development', // Bắt buộc HTTPS ở production
-            // sameSite: 'lax',
-            sameSite: 'strict',// Giúp giữ cookie khi chuyển trang mượt mà hơn
+            httpOnly: true, // Chống XSS (JS không đọc được)
+            secure: process.env.NODE_ENV === 'production', // Bắt buộc HTTPS ở Production
+            sameSite: 'lax', // 'Lax' tốt cho UX login, 'Strict' quá gắt có thể gây lỗi redirect từ site khác
             maxAge: SESSION_DURATION_MS / 1000,
             path: '/',
+            priority: 'high'
         });
 
+        console.log(`[Security] Admin login success: ${userEmail}`);
         return response;
+
     } catch (error) {
         console.error('[Login Error]', error);
-        return NextResponse.json({ error: 'Xác thực thất bại, vui lòng thử lại' }, { status: 401 });
+        return NextResponse.json({ error: 'Xác thực thất bại' }, { status: 401 });
     }
 }
 

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { slugify } from '@/lib/utils';
 import Image from 'next/image';
 import Link from 'next/link';
+import { sign } from 'crypto';
 
 export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
@@ -321,9 +322,34 @@ export default function AdminDashboard() {
     };
 
     const handleLogout = async () => {
-        await signOut(auth);
-        await fetch('/api/auth/session', { method: 'DELETE' });
-        router.push('/admin/login');
+        try {
+            // BƯỚC 1: Hủy Session Cookie trên Server
+            // THAY ĐỔI ĐƯỜNG DẪN: Từ '/admin/dashboard' sang '/api/auth/session'
+            const response = await fetch('/api/auth/session', { // <--- ĐƯỜNG DẪN ĐÚNG CẦN SỬA
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            if (!response.ok) {
+                console.error("Lỗi khi hủy session trên Server.");
+                // Tiếp tục vì session client vẫn cần sign out
+            }
+            // 2. Huỷ phiên đăng nhập của Client SDK
+            // THÊM KIỂM TRA ĐIỀU KIỆN (if (auth)) ĐỂ TRÁNH LỖI TypeError
+            if (auth) {
+                await signOut(auth);
+            } else {
+                console.warn("Lỗi: Không tìm thấy Firebase Auth instance. Chỉ xoá Session Cookie.");
+            }
+
+        } catch (error) {
+            console.error("Đăng xuất thất bại trong quá trình client:", error);
+        } finally {
+            // 3. ĐẢM BẢO CHUYỂN HƯỚNG REFRESH TRANG
+            // BƯỚC NÀY BẮT BUỘC PHẢI THỰC HIỆN DÙ CÓ LỖI HAY KHÔNG
+            router.push('/admin/login');
+            router.refresh();
+        }
     };
 
     const openConfirmModal = ({ title, message, onConfirm }) => {

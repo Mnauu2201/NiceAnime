@@ -580,7 +580,7 @@ export default function Home() {
                         borderRadius: '1rem'
                     }}>
                         <p style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Không tìm thấy phim phù hợp.</p>
-                        <p style={{ color: '#94a3b8' }}>Thử một từ khóa hoặc bộ lọc khác nhé!</p>
+                        <p style={{ color: '#94a3b8' }}>Thử một từ khoá hoặc bộ lọc khác nhé!</p>
                     </div>
                 ) : (
                     <div style={{
@@ -944,7 +944,7 @@ export default function Home() {
                             fontSize: '0.9rem',
                             marginBottom: '0.5rem'
                         }}>
-                            Copyright © {new Date().getFullYear()} by NiceAnime - All rights reserved.
+                            Copyright © 2025 by NiceAnime - All rights reserved.
                         </p>
                         <p style={{
                             color: '#475569',

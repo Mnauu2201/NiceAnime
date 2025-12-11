@@ -3,6 +3,19 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+// -------------------------------------------------------------------
+// CẤU HÌNH TÊN MIỀN TỰ ĐỘNG (FIX WARNING)
+// -------------------------------------------------------------------
+const VERCEL_DOMAIN = 'niceanime.vercel.app'; // Tên miền Vercel của bạn
+
+// Tự động xác định URL gốc: localhost khi dev, Vercel URL khi deploy
+const metadataBaseUrl = new URL(
+  process.env.NODE_ENV === 'development'
+    ? 'http://localhost:3000'
+    : `https://${process.env.VERCEL_URL || VERCEL_DOMAIN}`
+);
+// -------------------------------------------------------------------
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -15,6 +28,9 @@ const geistMono = Geist_Mono({
 
 // ** BƯỚC TỐI ƯU SEO: Khai báo Metadata chi tiết **
 export const metadata: Metadata = {
+  // DÒNG CẦN THIẾT ĐỂ FIX CẢNH BÁO metadataBase:
+  metadataBase: metadataBaseUrl, // <-- SỬ DỤNG URL ĐÃ XÁC ĐỊNH Ở TRÊN
+
   // 1. Title
   title: {
     default: "NiceAnime - Khám phá kho phim Vietsub chất lượng cao", // Tiêu đề mặc định cho trang chủ
@@ -23,7 +39,7 @@ export const metadata: Metadata = {
   // 2. Description
   description:
     "Xem phim Anime Vietsub, phim hoạt hình online chất lượng cao, cập nhật liên tục mỗi ngày. Kho phim không quảng cáo, tốc độ load nhanh, độ nét full HD.",
-  // 3. Icons (Favicon) - Đã có sẵn trong code của bạn
+  // 3. Icons (Favicon)
   icons: {
     icon: "/faviconNiceAnimee2.png",
     shortcut: "/faviconNiceAnimee2.png",
@@ -34,11 +50,11 @@ export const metadata: Metadata = {
     title: "NiceAnime - Xem Anime Vietsub Full HD Mới Nhất",
     description:
       "Tuyển tập phim Anime, hoạt hình Vietsub chất lượng cao, cập nhật liên tục. Xem miễn phí, tốc độ cao.",
-    url: "https://yourdomain.com", // Thay bằng domain thật của bạn
+    url: metadataBaseUrl.toString(), // <-- ĐÃ SỬA: SỬ DỤNG URL ĐỘNG TỪ metadataBase
     siteName: "NiceAnime",
     images: [
       {
-        url: "/NiceAnime-header.png", // Thay bằng URL ảnh lớn (1200x630)
+        url: "/NiceAnime-header.png", // Next.js sẽ tự động tạo URL tuyệt đối từ metadataBase
         width: 1200,
         height: 630,
         alt: "NiceAnime Logo và Slogan",
@@ -56,7 +72,7 @@ export const metadata: Metadata = {
   },
   // 6. Mã xác minh Google Search Console
   verification: {
-    google: "eYYukttLRziLKYieptaO435u-qnvAtoSBKwQleTyMqk", // <<< THÊM DÒNG NÀY
+    google: "eYYukttLRziLKYieptaO435u-qnvAtoSBKwQleTyMqk",
   },
 };
 
