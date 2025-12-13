@@ -9,6 +9,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { sign } from 'crypto';
 
+
 export default function AdminDashboardClient() {
     const [loading, setLoading] = useState(true);
     const [movies, setMovies] = useState([]);

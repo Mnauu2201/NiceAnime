@@ -1,58 +1,49 @@
-// /app/admin/dashboard/page.js (Server Component)
+// app/admin/page.js
+'use client';
+import { useState } from 'react';
+// Đảm bảo đường dẫn import component đúng với thư mục của bạn
+import AdminSidebar from '../../../../components/admin/AdminSidebar';
 
-// 1. Import Client Component đã đổi tên
-import AdminDashboardClient from './AdminDashboardClient';
-// 2. Import Firestore Client SDK 
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+// 2. IMPORT CLIENT COMPONENT (Đã di chuyển)
+// Đường dẫn tương đối dựa trên cấu trúc: page.js -> (dashboard) -> (protected) -> admin -> app -> components/AdminDashboardClient.js
+import AdminDashboardClient from '../../../../components/AdminDashboardClient';
+import MovieListClient from '../../../../components/admin/MovieListClient'; 
 
-const MOVIES_PER_PAGE = 20;
+export default function AdminPage() {
+    // State để quản lý Tab hiện tại đang được chọn
+    const [activeTab, setActiveTab] = useState('dashboard'); // Mặc định là 'dashboard'
 
-/**
- * Hàm Fetch Data ban đầu chạy trên Server để tối ưu hóa tốc độ tải trang
- */
-async function fetchInitialMovies() {
-    // Query lấy 21 document (20 phim hiển thị + 1 để kiểm tra còn phim không)
-    const q = query(
-        collection(db, 'movies'),
-        orderBy('createdAt', 'desc'),
-        limit(MOVIES_PER_PAGE + 1)
-    );
+    const handleTabChange = (tabKey) => {
+        setActiveTab(tabKey);
+    };
 
-    const snapshot = await getDocs(q);
-    const docs = snapshot.docs;
+    // Hàm quyết định nội dung nào được hiển thị
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'dashboard':
+                // Component này chứa Form Thêm/Sửa Phim
+                return <AdminDashboardClient />; 
+            case 'movie-list':
+                // Component này chứa Danh sách Phim và thanh tìm kiếm
+                return <MovieListClient />;
+            default:
+                // Trường hợp mặc định
+                return <div className="p-8 text-white">Vui lòng chọn một chức năng từ Sidebar.</div>;
+        }
+    };
 
-    // Kiểm tra còn trang tiếp theo không
-    const hasMore = docs.length > MOVIES_PER_PAGE;
-
-    // Lấy 20 phim đầu tiên để hiển thị
-    const initialMovies = docs.slice(0, MOVIES_PER_PAGE).map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        // Chuyển đối tượng Date thành chuỗi để truyền qua Server/Client boundary
-        createdAt: doc.data().createdAt?.toDate().toISOString() || null,
-        // Đảm bảo các trường này tồn tại để tránh lỗi
-        category: Array.isArray(doc.data().category) ? doc.data().category : [doc.data().category].filter(Boolean),
-        format: doc.data().format || 'Phim lẻ',
-        otherTitles: doc.data().otherTitles || ''
-    }));
-
-    // Lấy ID của document thứ 20 (dùng làm con trỏ cho lần fetch tiếp theo)
-    const lastVisibleDocId = hasMore ? docs[MOVIES_PER_PAGE - 1].id : null;
-
-    return { initialMovies, lastVisibleDocId, initialHasMore: hasMore };
-}
-
-export default async function AdminDashboardPage() {
-    // Gọi hàm fetch data (Server Component tự động await)
-    const { initialMovies, lastVisibleDocId, initialHasMore } = await fetchInitialMovies();
-
-    // Truyền dữ liệu ban đầu xuống Client Component
     return (
-        <AdminDashboardClient
-            initialMovies={initialMovies}
-            initialLastVisibleDocId={lastVisibleDocId}
-            initialHasMore={initialHasMore}
-        />
+        <div className="flex min-h-screen bg-gray-900">
+            {/* Truyền trạng thái và hàm xử lý sự kiện xuống Sidebar */}
+            <AdminSidebar 
+                activeTab={activeTab} 
+                onTabChange={handleTabChange} 
+            />
+            
+            {/* Vùng hiển thị Nội dung Tab */}
+            <main className="flex-1 overflow-y-auto">
+                {renderContent()}
+            </main>
+        </div>
     );
 }
